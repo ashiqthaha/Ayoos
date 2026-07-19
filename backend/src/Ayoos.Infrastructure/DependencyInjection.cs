@@ -1,7 +1,10 @@
 using Ayoos.Application.Common.Interfaces;
 using Ayoos.Infrastructure.Persistence;
 using Ayoos.Infrastructure.Repositories;
+using Ayoos.Infrastructure.Tenancy;
 using Finbuckle.MultiTenant.Abstractions;
+using Finbuckle.MultiTenant.AspNetCore.Extensions;
+using Finbuckle.MultiTenant.EntityFrameworkCore.Extensions;
 using Finbuckle.MultiTenant.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -15,17 +18,23 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        var connectionString = configuration.GetConnectionString("Ayoos")
+        var connectionString = configuration.GetConnectionString("Default")
             ?? throw new InvalidOperationException(
-                "Connection string 'Ayoos' was not configured.");
+                "Connection string 'Default' was not configured.");
 
         services.AddDbContext<AyoosDbContext>(options =>
             options.UseNpgsql(connectionString));
-        services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
+        services.AddDbContext<TenantStoreDbContext>(options =>
+            options.UseNpgsql(connectionString));
 
-        // Placeholder tenant store; tenant resolution strategies are added with product features.
+        services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
+        services.AddScoped<IPracticeRepository, PracticeRepository>();
+        services.AddScoped<IPracticeProvisioner, PracticeProvisioner>();
+        services.AddScoped<ITenantRegistry, TenantRegistry>();
+
         services.AddMultiTenant<TenantInfo>()
-            .WithInMemoryStore();
+            .WithHeaderStrategy("X-Tenant")
+            .WithEFCoreStore<TenantStoreDbContext, TenantInfo>();
 
         return services;
     }

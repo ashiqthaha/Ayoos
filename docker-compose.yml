@@ -39,7 +39,8 @@ services:
       dockerfile: src/Ayoos.Api/Dockerfile
     environment:
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__Ayoos: Host=postgres;Port=5432;Database=${POSTGRES_DB:-ayoos};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-ayoos_dev_password}
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Default: Host=postgres;Port=5432;Database=${POSTGRES_DB:-ayoos};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-ayoos_dev_password}
     depends_on:
       postgres:
         condition: service_healthy
