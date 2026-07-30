@@ -1,4 +1,5 @@
 using Ayoos.Domain.Practices;
+using Ayoos.Domain.Providers;
 using Finbuckle.MultiTenant.Abstractions;
 using Finbuckle.MultiTenant.EntityFrameworkCore;
 using Finbuckle.MultiTenant.EntityFrameworkCore.Extensions;
@@ -13,10 +14,20 @@ public sealed class AyoosDbContext(
 {
     public DbSet<Practice> Practices => Set<Practice>();
 
+    public DbSet<Provider> Providers => Set<Provider>();
+
+    public DbSet<AvailabilityRule> AvailabilityRules => Set<AvailabilityRule>();
+
+    public DbSet<AvailabilityException> AvailabilityExceptions =>
+        Set<AvailabilityException>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AyoosDbContext).Assembly);
         modelBuilder.Entity<Practice>().IsMultiTenant();
+        modelBuilder.Entity<Provider>().IsMultiTenant();
+        modelBuilder.Entity<AvailabilityRule>().IsMultiTenant();
+        modelBuilder.Entity<AvailabilityException>().IsMultiTenant();
     }
 }

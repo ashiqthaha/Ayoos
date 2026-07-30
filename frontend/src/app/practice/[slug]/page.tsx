@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 
@@ -246,18 +247,26 @@ export default function PracticeDashboardPage() {
               <p className="mt-3 text-slate-500">/{practice.slug}</p>
             </div>
             {!isEditing && (
-              <button
-                type="button"
-                onClick={() => {
-                  setForm(practiceToInput(practice));
-                  setErrors({});
-                  setBanner(null);
-                  setIsEditing(true);
-                }}
-                className="inline-flex w-fit items-center justify-center rounded-xl bg-teal-700 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-700/15 transition hover:bg-teal-800 focus:outline-none focus:ring-4 focus:ring-teal-500/20"
-              >
-                Edit practice
-              </button>
+              <div className="flex flex-wrap gap-3">
+                <Link
+                  href={`/practice/${encodeURIComponent(practice.slug)}/providers`}
+                  className="inline-flex w-fit items-center justify-center rounded-xl border border-teal-200 bg-white px-5 py-3 text-sm font-semibold text-teal-800 transition hover:bg-teal-50 focus:outline-none focus:ring-4 focus:ring-teal-500/15"
+                >
+                  Manage providers
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForm(practiceToInput(practice));
+                    setErrors({});
+                    setBanner(null);
+                    setIsEditing(true);
+                  }}
+                  className="inline-flex w-fit items-center justify-center rounded-xl bg-teal-700 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-700/15 transition hover:bg-teal-800 focus:outline-none focus:ring-4 focus:ring-teal-500/20"
+                >
+                  Edit practice
+                </button>
+              </div>
             )}
           </div>
 

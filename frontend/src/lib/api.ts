@@ -29,6 +29,58 @@ export type Practice = Omit<PracticeInput, "address"> & {
   isActive: boolean;
 };
 
+export type ProviderInput = {
+  firstName: string;
+  lastName: string;
+  credentials: string;
+  specialty: string;
+  email: string;
+  phone: string;
+};
+
+export type Provider = ProviderInput & {
+  id: string;
+  practiceId: string;
+  isActive: boolean;
+  createdAtUtc: string;
+};
+
+export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+export type AvailabilityRuleInput = {
+  dayOfWeek: DayOfWeek;
+  startTime: string;
+  endTime: string;
+  slotDurationMinutes: number;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+};
+
+export type AvailabilityRule = AvailabilityRuleInput & {
+  id: string;
+  providerId: string;
+};
+
+export type AvailabilityExceptionInput = {
+  date: string;
+  isUnavailable: boolean;
+  overrideStartTime: string | null;
+  overrideEndTime: string | null;
+  reason: string | null;
+};
+
+export type AvailabilityException = AvailabilityExceptionInput & {
+  id: string;
+  providerId: string;
+};
+
+export type AvailabilitySlot = {
+  date: string;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+};
+
 export type ProblemDetails = {
   type?: string;
   title?: string;
@@ -133,4 +185,155 @@ export function updatePractice(
     headers: { "X-Tenant": currentSlug },
     body: JSON.stringify({ ...input, isActive }),
   });
+}
+
+function tenantHeaders(slug: string): HeadersInit {
+  return { "X-Tenant": slug };
+}
+
+export function listProviders(
+  slug: string,
+  signal?: AbortSignal,
+): Promise<Provider[]> {
+  return request<Provider[]>("/api/providers", {
+    headers: tenantHeaders(slug),
+    signal,
+  });
+}
+
+export function createProvider(
+  slug: string,
+  input: ProviderInput,
+): Promise<Provider> {
+  return request<Provider>("/api/providers", {
+    method: "POST",
+    headers: tenantHeaders(slug),
+    body: JSON.stringify(input),
+  });
+}
+
+export function getProvider(
+  slug: string,
+  providerId: string,
+  signal?: AbortSignal,
+): Promise<Provider> {
+  return request<Provider>(`/api/providers/${encodeURIComponent(providerId)}`, {
+    headers: tenantHeaders(slug),
+    signal,
+  });
+}
+
+export function updateProvider(
+  slug: string,
+  providerId: string,
+  input: ProviderInput,
+): Promise<Provider> {
+  return request<Provider>(`/api/providers/${encodeURIComponent(providerId)}`, {
+    method: "PUT",
+    headers: tenantHeaders(slug),
+    body: JSON.stringify(input),
+  });
+}
+
+export function deactivateProvider(
+  slug: string,
+  providerId: string,
+): Promise<Provider> {
+  return request<Provider>(
+    `/api/providers/${encodeURIComponent(providerId)}/deactivate`,
+    {
+      method: "POST",
+      headers: tenantHeaders(slug),
+    },
+  );
+}
+
+export function getAvailabilityRules(
+  slug: string,
+  providerId: string,
+  signal?: AbortSignal,
+): Promise<AvailabilityRule[]> {
+  return request<AvailabilityRule[]>(
+    `/api/providers/${encodeURIComponent(providerId)}/availability-rules`,
+    {
+      headers: tenantHeaders(slug),
+      signal,
+    },
+  );
+}
+
+export function setAvailabilityRules(
+  slug: string,
+  providerId: string,
+  rules: AvailabilityRuleInput[],
+): Promise<AvailabilityRule[]> {
+  return request<AvailabilityRule[]>(
+    `/api/providers/${encodeURIComponent(providerId)}/availability-rules`,
+    {
+      method: "PUT",
+      headers: tenantHeaders(slug),
+      body: JSON.stringify({ rules }),
+    },
+  );
+}
+
+export function getAvailabilityExceptions(
+  slug: string,
+  providerId: string,
+  signal?: AbortSignal,
+): Promise<AvailabilityException[]> {
+  return request<AvailabilityException[]>(
+    `/api/providers/${encodeURIComponent(providerId)}/availability-exceptions`,
+    {
+      headers: tenantHeaders(slug),
+      signal,
+    },
+  );
+}
+
+export function addAvailabilityException(
+  slug: string,
+  providerId: string,
+  input: AvailabilityExceptionInput,
+): Promise<AvailabilityException> {
+  return request<AvailabilityException>(
+    `/api/providers/${encodeURIComponent(providerId)}/availability-exceptions`,
+    {
+      method: "POST",
+      headers: tenantHeaders(slug),
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function removeAvailabilityException(
+  slug: string,
+  providerId: string,
+  exceptionId: string,
+): Promise<void> {
+  const query = new URLSearchParams({ exceptionId });
+  return request<void>(
+    `/api/providers/${encodeURIComponent(providerId)}/availability-exceptions?${query}`,
+    {
+      method: "DELETE",
+      headers: tenantHeaders(slug),
+    },
+  );
+}
+
+export function getProviderSlots(
+  slug: string,
+  providerId: string,
+  fromDate: string,
+  toDate: string,
+  signal?: AbortSignal,
+): Promise<AvailabilitySlot[]> {
+  const query = new URLSearchParams({ from: fromDate, to: toDate });
+  return request<AvailabilitySlot[]>(
+    `/api/providers/${encodeURIComponent(providerId)}/slots?${query}`,
+    {
+      headers: tenantHeaders(slug),
+      signal,
+    },
+  );
 }
