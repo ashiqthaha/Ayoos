@@ -1,0 +1,36 @@
+AYOOS — HANDOVER
+
+PROJECT
+Ayoos: greenfield telehealth EMR (name from Malayalam ആയുസ്സ്, "lifespan").
+Repo: github.com/ashiqthaha/Ayoos (private)
+Local root: C:\Developement Workground\ecare  (machine: Persiphona, Windows + WSL2 + Docker Desktop)
+Plan: build local → deploy to GCP VM for testing later.
+Note: "Resource Archive/" holds reference repos, gitignored. No Ottehr/Oystehr code or logic anywhere.
+
+STACK (locked)
+.NET 10 Clean Architecture (Domain / Application / Infrastructure / Api), MediatR CQRS, FluentValidation,
+EF Core + PostgreSQL, Finbuckle.MultiTenant (X-Tenant header, token claim preferred when present),
+Next.js 15 + TypeScript + Tailwind (teal/white healthcare style),
+Keycloak self-hosted (realm-as-code at /infra/keycloak/realm-ayoos.json),
+Docker Compose from day one. LiveKit for video in a later phase.
+
+DONE
+P0.1 env scripts · P0.2 scaffold · P0.3 docker-compose (postgres, keycloak, api, frontend)
+P1.1 Practice entity + multi-tenancy + API
+P1.2 Practice setup wizard + dashboard UI
+P1.3 Providers, availability rules/exceptions, slot generation (+ fix: Finbuckle TenantId on replaced child entities)
+P1.4a Keycloak auth — JWT validation, role mapping (practice-admin/provider/staff/patient), policies, PKCE login, route guards
+Dev seed login: admin@ayoos.local / Dev12345!  (dev only)
+
+NEXT
+P1.4b Patient registration (patient records + self-registration via Keycloak)
+P1.5 Booking engine (slots, conflict handling, API)
+P1.6 Booking UI + end-to-end click-through
+P2.1 GCP VM deployment
+Later slices: consent, waiting room, LiveKit video, encounter note, visit summary, audit trail
+Open item: two high-severity npm audit findings in frontend deps — triage before slice 2.
+
+HOW I WANT TO WORK
+I have ADHD — keep responses short, one step at a time.
+Every code prompt goes in a copy-paste box, labeled [CODEX] or [POWERSHELL] so I don't paste prose into a terminal.
+One prompt = one feature. Each prompt ends with how to verify it worked, then we commit and push before moving on.
