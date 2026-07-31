@@ -1,6 +1,10 @@
 using Ayoos.Application.Common.Behaviors;
 using Ayoos.Application.Practices.CreatePractice;
 using Ayoos.Application.Practices.UpdatePractice;
+using Ayoos.Application.Patients.DeactivatePatient;
+using Ayoos.Application.Patients.LinkPatientToKeycloakUser;
+using Ayoos.Application.Patients.RegisterPatient;
+using Ayoos.Application.Patients.UpdatePatient;
 using Ayoos.Application.Providers;
 using Ayoos.Application.Providers.AddAvailabilityException;
 using Ayoos.Application.Providers.CreateProvider;
@@ -23,6 +27,18 @@ public static class DependencyInjection
             configuration.RegisterServicesFromAssemblyContaining<AssemblyReference>());
         services.AddScoped<IValidator<CreatePracticeCommand>, CreatePracticeCommandValidator>();
         services.AddScoped<IValidator<UpdatePracticeCommand>, UpdatePracticeCommandValidator>();
+        services.AddScoped<
+            IValidator<RegisterPatientCommand>,
+            RegisterPatientCommandValidator>();
+        services.AddScoped<
+            IValidator<UpdatePatientCommand>,
+            UpdatePatientCommandValidator>();
+        services.AddScoped<
+            IValidator<DeactivatePatientCommand>,
+            DeactivatePatientCommandValidator>();
+        services.AddScoped<
+            IValidator<LinkPatientToKeycloakUserCommand>,
+            LinkPatientToKeycloakUserCommandValidator>();
         services.AddScoped<IValidator<CreateProviderCommand>, CreateProviderCommandValidator>();
         services.AddScoped<IValidator<UpdateProviderCommand>, UpdateProviderCommandValidator>();
         services.AddScoped<

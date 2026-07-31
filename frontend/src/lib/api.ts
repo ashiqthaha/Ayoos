@@ -50,6 +50,78 @@ export type Provider = ProviderInput & {
   createdAtUtc: string;
 };
 
+export type PatientSex = 0 | 1 | 2 | 3;
+
+export type PatientAddress = {
+  line1: string;
+  line2: string | null;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+};
+
+export type PatientAddressInput = Omit<PatientAddress, "line2"> & {
+  line2: string;
+};
+
+export type EmergencyContact = {
+  id: string;
+  name: string;
+  relationship: string;
+  phone: string;
+};
+
+export type EmergencyContactInput = Omit<EmergencyContact, "id">;
+
+export type PatientInput = {
+  firstName: string;
+  lastName: string;
+  preferredName: string;
+  dateOfBirth: string;
+  sex: PatientSex;
+  email: string;
+  phone: string;
+  address: PatientAddressInput;
+  preferredLanguage: string;
+  emergencyContact: EmergencyContactInput | null;
+};
+
+export type Patient = Omit<
+  PatientInput,
+  "preferredName" | "address" | "preferredLanguage" | "emergencyContact"
+> & {
+  id: string;
+  practiceId: string;
+  keycloakUserId: string | null;
+  preferredName: string | null;
+  address: PatientAddress;
+  preferredLanguage: string | null;
+  emergencyContact: EmergencyContact | null;
+  isActive: boolean;
+  createdAtUtc: string;
+  updatedAtUtc: string | null;
+};
+
+export type PatientDuplicateMatch = Pick<
+  Patient,
+  "id" | "firstName" | "lastName" | "dateOfBirth" | "email" | "phone"
+>;
+
+export type RegisterPatientResult = {
+  patient: Patient | null;
+  duplicateWarning: boolean;
+  possibleMatches: PatientDuplicateMatch[];
+};
+
+export type PagedList<T> = {
+  items: T[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+};
+
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 export type AvailabilityRuleInput = {
@@ -252,6 +324,85 @@ export function deactivateProvider(
 ): Promise<Provider> {
   return request<Provider>(
     `/api/providers/${encodeURIComponent(providerId)}/deactivate`,
+    {
+      method: "POST",
+      headers: tenantHeaders(slug),
+    },
+  );
+}
+
+export function listPatients(
+  slug: string,
+  options: {
+    search?: string;
+    page?: number;
+    pageSize?: number;
+    signal?: AbortSignal;
+  } = {},
+): Promise<PagedList<Patient>> {
+  const query = new URLSearchParams({
+    page: String(options.page ?? 1),
+    pageSize: String(options.pageSize ?? 20),
+  });
+  if (options.search?.trim()) query.set("search", options.search.trim());
+
+  return request<PagedList<Patient>>(`/api/patients?${query}`, {
+    headers: tenantHeaders(slug),
+    signal: options.signal,
+  });
+}
+
+export function registerPatient(
+  slug: string,
+  input: PatientInput,
+  confirmDuplicate = false,
+): Promise<RegisterPatientResult> {
+  return request<RegisterPatientResult>("/api/patients", {
+    method: "POST",
+    headers: tenantHeaders(slug),
+    body: JSON.stringify({ ...input, confirmDuplicate }),
+  });
+}
+
+export function getPatient(
+  slug: string,
+  patientId: string,
+  signal?: AbortSignal,
+): Promise<Patient> {
+  return request<Patient>(`/api/patients/${encodeURIComponent(patientId)}`, {
+    headers: tenantHeaders(slug),
+    signal,
+  });
+}
+
+export function getMyPatientRecord(
+  slug: string,
+  signal?: AbortSignal,
+): Promise<Patient> {
+  return request<Patient>("/api/patients/me", {
+    headers: tenantHeaders(slug),
+    signal,
+  });
+}
+
+export function updatePatient(
+  slug: string,
+  patientId: string,
+  input: PatientInput,
+): Promise<Patient> {
+  return request<Patient>(`/api/patients/${encodeURIComponent(patientId)}`, {
+    method: "PUT",
+    headers: tenantHeaders(slug),
+    body: JSON.stringify(input),
+  });
+}
+
+export function deactivatePatient(
+  slug: string,
+  patientId: string,
+): Promise<Patient> {
+  return request<Patient>(
+    `/api/patients/${encodeURIComponent(patientId)}/deactivate`,
     {
       method: "POST",
       headers: tenantHeaders(slug),

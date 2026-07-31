@@ -1,4 +1,5 @@
 using Ayoos.Domain.Practices;
+using Ayoos.Domain.Patients;
 using Ayoos.Domain.Providers;
 using Finbuckle.MultiTenant.Abstractions;
 using Finbuckle.MultiTenant.EntityFrameworkCore;
@@ -16,6 +17,10 @@ public sealed class AyoosDbContext(
 
     public DbSet<Provider> Providers => Set<Provider>();
 
+    public DbSet<Patient> Patients => Set<Patient>();
+
+    public DbSet<EmergencyContact> EmergencyContacts => Set<EmergencyContact>();
+
     public DbSet<AvailabilityRule> AvailabilityRules => Set<AvailabilityRule>();
 
     public DbSet<AvailabilityException> AvailabilityExceptions =>
@@ -27,6 +32,8 @@ public sealed class AyoosDbContext(
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AyoosDbContext).Assembly);
         modelBuilder.Entity<Practice>().IsMultiTenant();
         modelBuilder.Entity<Provider>().IsMultiTenant();
+        modelBuilder.Entity<Patient>().IsMultiTenant();
+        modelBuilder.Entity<EmergencyContact>().IsMultiTenant();
         modelBuilder.Entity<AvailabilityRule>().IsMultiTenant();
         modelBuilder.Entity<AvailabilityException>().IsMultiTenant();
     }

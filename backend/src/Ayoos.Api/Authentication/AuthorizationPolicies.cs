@@ -4,6 +4,7 @@ internal static class AuthorizationPolicies
 {
     public const string PracticeAdmin = nameof(PracticeAdmin);
     public const string ProviderOnly = nameof(ProviderOnly);
+    public const string PatientOnly = nameof(PatientOnly);
     public const string StaffOrAdmin = nameof(StaffOrAdmin);
     public const string AuthenticatedUser = nameof(AuthenticatedUser);
 }

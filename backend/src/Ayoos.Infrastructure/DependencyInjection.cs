@@ -31,6 +31,7 @@ public static class DependencyInjection
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
         services.AddScoped<IPracticeRepository, PracticeRepository>();
         services.AddScoped<IProviderRepository, ProviderRepository>();
+        services.AddScoped<IPatientRepository, PatientRepository>();
         services.AddScoped<ICurrentPracticeContext, CurrentPracticeContext>();
         services.AddScoped<IPracticeProvisioner, PracticeProvisioner>();
         services.AddScoped<ITenantRegistry, TenantRegistry>();
