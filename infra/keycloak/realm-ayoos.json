@@ -1,0 +1,131 @@
+{
+  "realm": "ayoos",
+  "enabled": true,
+  "displayName": "Ayoos",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": true,
+  "rememberMe": true,
+  "roles": {
+    "realm": [
+      {
+        "name": "practice-admin",
+        "description": "Administers a practice and its staff."
+      },
+      {
+        "name": "provider",
+        "description": "Provides clinical care for a practice."
+      },
+      {
+        "name": "staff",
+        "description": "Manages day-to-day practice operations."
+      },
+      {
+        "name": "patient",
+        "description": "Receives care from a practice."
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "ayoos-frontend",
+      "name": "Ayoos frontend",
+      "description": "Public browser client for the Ayoos Next.js application.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "bearerOnly": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "http://localhost:5000/swagger/oauth2-redirect.html"
+      ],
+      "webOrigins": [
+        "http://localhost:3000",
+        "http://localhost:5000"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:3000/*"
+      },
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "basic",
+        "email"
+      ],
+      "protocolMappers": [
+        {
+          "name": "ayoos-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "ayoos-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "practice-tenant",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "practice",
+            "claim.name": "practice",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "ayoos-api",
+      "name": "Ayoos API",
+      "description": "Bearer-only resource server for the Ayoos backend.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
+    }
+  ],
+  "users": [
+    {
+      "username": "admin@ayoos.local",
+      "email": "admin@ayoos.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Development",
+      "lastName": "Administrator",
+      "attributes": {
+        "ayoos.dev-seed": [
+          "DEVELOPMENT ONLY - MUST NEVER EXIST IN PRODUCTION"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Dev12345!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "practice-admin"
+      ]
+    }
+  ]
+}

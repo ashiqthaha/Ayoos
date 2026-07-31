@@ -21,8 +21,9 @@ fails, the new tenant registration is removed.
 
 ## Current request resolution
 
-For now, API requests resolve a tenant from the `X-Tenant` HTTP header. The
-header value is the practice slug, for example:
+API authentication runs before tenant resolution. If a validated token contains
+a `practice` or `tenant` claim, its value is tried first as the practice slug.
+The `X-Tenant` HTTP header remains the fallback, for example:
 
 ```http
 X-Tenant: downtown-family-clinic
@@ -32,10 +33,9 @@ X-Tenant: downtown-family-clinic
 The route slug must identify a Practice visible inside the tenant selected by
 the header; a different tenant's row is excluded by the database query filter.
 
-The header is only a tenant-routing mechanism. It is not authentication or an
-authorization boundary by itself, so callers must not be considered trusted
-solely because they supplied a tenant slug. Authentication and authorization
-will be added with Keycloak.
+The claim and header are tenant-routing mechanisms. Role-based authorization is
+enforced separately from the validated Keycloak token, so callers must not be
+considered authorized solely because they supplied a tenant slug.
 
 ## Data isolation
 
@@ -59,10 +59,5 @@ separate EF Core contexts and migrations:
 Both migration sets are applied automatically at API startup only when the
 environment is `Development`.
 
-## Planned resolution strategy
-
-The header strategy is intentionally temporary. Tenant resolution will move to
-subdomain routing and/or a trusted tenant claim in the authenticated JWT. The
-tenant identifier and PostgreSQL store model can remain unchanged when the
-strategy changes; only the request-resolution configuration and related edge
-validation should need to change.
+See [Authentication and authorization](authentication.md) for the Keycloak
+token flow, realm roles, and tenant-claim mapper.

@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 
 import { AyoosMark } from "@/components/ayoos-mark";
+import { UserMenu } from "@/components/user-menu";
 import {
   ProviderFormFields,
   type ProviderField,
@@ -104,12 +105,15 @@ export default function ProvidersPage() {
       <div className="mx-auto max-w-6xl px-5 py-6 sm:px-8 sm:py-8">
         <header className="flex items-center justify-between gap-4">
           <AyoosMark />
-          <Link
-            href={`/practice/${encodeURIComponent(slug)}`}
-            className="rounded-xl px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-white hover:text-teal-700"
-          >
-            Practice dashboard
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/practice/${encodeURIComponent(slug)}`}
+              className="hidden rounded-xl px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-white hover:text-teal-700 md:inline-flex"
+            >
+              Practice dashboard
+            </Link>
+            <UserMenu />
+          </div>
         </header>
 
         <section className="mt-10 sm:mt-14">

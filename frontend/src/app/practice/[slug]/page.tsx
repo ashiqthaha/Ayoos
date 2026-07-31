@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 
 import { AyoosMark } from "@/components/ayoos-mark";
+import { UserMenu } from "@/components/user-menu";
 import {
   PracticeAddressFields,
   PracticeContactFields,
@@ -231,9 +232,12 @@ export default function PracticeDashboardPage() {
       <div className="mx-auto max-w-6xl px-5 py-6 sm:px-8 sm:py-8">
         <header className="flex items-center justify-between gap-5">
           <AyoosMark />
-          <div className="flex items-center gap-2 rounded-full border border-emerald-100 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 shadow-sm">
-            <span className="h-2 w-2 rounded-full bg-emerald-500" />
-            {practice.isActive ? "Active practice" : "Inactive practice"}
+          <div className="flex items-center gap-3">
+            <div className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 shadow-sm md:flex">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              {practice.isActive ? "Active practice" : "Inactive practice"}
+            </div>
+            <UserMenu />
           </div>
         </header>
 

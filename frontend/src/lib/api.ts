@@ -1,3 +1,8 @@
+import {
+  getAccessToken,
+  redirectToLoginAfterUnauthorized,
+} from "@/lib/auth-client";
+
 const defaultApiUrl = "http://localhost:5000";
 
 export type PracticeAddress = {
@@ -126,6 +131,7 @@ async function readProblemDetails(response: Response): Promise<ProblemDetails | 
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   let response: Response;
+  const accessToken = await getAccessToken();
 
   try {
     response = await fetch(`${getApiUrl()}${path}`, {
@@ -134,6 +140,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       headers: {
         Accept: "application/json",
         ...(init.body ? { "Content-Type": "application/json" } : {}),
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         ...init.headers,
       },
     });
@@ -145,6 +152,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
 
   if (!response.ok) {
+    if (response.status === 401) {
+      await redirectToLoginAfterUnauthorized();
+    }
+
     const problem = await readProblemDetails(response);
     const message =
       problem?.detail ||

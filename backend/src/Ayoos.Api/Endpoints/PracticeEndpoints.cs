@@ -2,6 +2,7 @@ using Ayoos.Application.Practices;
 using Ayoos.Application.Practices.CreatePractice;
 using Ayoos.Application.Practices.GetPractice;
 using Ayoos.Application.Practices.UpdatePractice;
+using Ayoos.Api.Authentication;
 using Finbuckle.MultiTenant.Abstractions;
 using Finbuckle.MultiTenant.AspNetCore.Extensions;
 using MediatR;
@@ -14,14 +15,16 @@ internal static class PracticeEndpoints
     public static IEndpointRouteBuilder MapPracticeEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/practices")
-            .WithTags("Practices");
+            .WithTags("Practices")
+            .RequireAuthorization(AuthorizationPolicies.AuthenticatedUser);
 
         group.MapPost(string.Empty, CreatePracticeAsync)
             .WithName("CreatePractice")
             .WithSummary("Creates a practice and registers it as a tenant.")
             .Produces<PracticeModel>(StatusCodes.Status201Created)
             .ProducesValidationProblem()
-            .ProducesProblem(StatusCodes.Status409Conflict);
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin);
 
         group.MapGet("/{slug}", GetPracticeAsync)
             .WithName("GetPractice")
@@ -35,7 +38,8 @@ internal static class PracticeEndpoints
             .Produces<PracticeModel>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound)
-            .ProducesProblem(StatusCodes.Status409Conflict);
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin);
 
         return endpoints;
     }
@@ -60,7 +64,7 @@ internal static class PracticeEndpoints
 
     private static async Task<IResult> GetPracticeAsync(
         string slug,
-        [FromHeader(Name = "X-Tenant")] string tenant,
+        [FromHeader(Name = "X-Tenant")] string? tenant,
         HttpContext httpContext,
         ISender sender,
         CancellationToken cancellationToken)
@@ -81,7 +85,7 @@ internal static class PracticeEndpoints
 
     private static async Task<IResult> UpdatePracticeAsync(
         string slug,
-        [FromHeader(Name = "X-Tenant")] string tenant,
+        [FromHeader(Name = "X-Tenant")] string? tenant,
         UpdatePracticeRequest request,
         HttpContext httpContext,
         ISender sender,
@@ -107,11 +111,13 @@ internal static class PracticeEndpoints
         return Results.Ok(result);
     }
 
-    private static IResult TenantNotFound(string tenant) =>
+    private static IResult TenantNotFound(string? tenant) =>
         Results.Problem(
             statusCode: StatusCodes.Status404NotFound,
             title: "Tenant not found.",
-            detail: $"No tenant registration was found for '{tenant}'.");
+            detail: string.IsNullOrWhiteSpace(tenant)
+                ? "A practice or tenant token claim, or the X-Tenant header, is required."
+                : $"No tenant registration was found for '{tenant}'.");
 }
 
 internal sealed record PracticeAddressRequest(

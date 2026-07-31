@@ -6,6 +6,7 @@ using Finbuckle.MultiTenant.Abstractions;
 using Finbuckle.MultiTenant.AspNetCore.Extensions;
 using Finbuckle.MultiTenant.EntityFrameworkCore.Extensions;
 using Finbuckle.MultiTenant.Extensions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,6 +36,16 @@ public static class DependencyInjection
         services.AddScoped<ITenantRegistry, TenantRegistry>();
 
         services.AddMultiTenant<TenantInfo>()
+            .WithDelegateStrategy<HttpContext, TenantInfo>(context =>
+            {
+                var tenantClaim = context.User.FindFirst("practice")?.Value
+                    ?? context.User.FindFirst("tenant")?.Value;
+
+                return Task.FromResult<string?>(
+                    string.IsNullOrWhiteSpace(tenantClaim)
+                        ? null
+                        : tenantClaim);
+            })
             .WithHeaderStrategy("X-Tenant")
             .WithEFCoreStore<TenantStoreDbContext, TenantInfo>();
 

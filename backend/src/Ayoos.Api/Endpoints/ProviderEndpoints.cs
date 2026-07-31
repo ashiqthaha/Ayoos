@@ -1,3 +1,4 @@
+using Ayoos.Api.Authentication;
 using Ayoos.Application.Providers;
 using Ayoos.Application.Providers.AddAvailabilityException;
 using Ayoos.Application.Providers.CreateProvider;
@@ -24,6 +25,7 @@ internal static class ProviderEndpoints
     {
         var group = endpoints.MapGroup("/api/providers")
             .WithTags("Providers")
+            .RequireAuthorization(AuthorizationPolicies.AuthenticatedUser)
             .AddEndpointFilter(async (context, next) =>
             {
                 var httpContext = context.HttpContext;
@@ -32,12 +34,14 @@ internal static class ProviderEndpoints
                     return await next(context);
                 }
 
-                var tenant = httpContext.Request.Headers["X-Tenant"].ToString();
+                var tenant = httpContext.User.FindFirst("practice")?.Value
+                    ?? httpContext.User.FindFirst("tenant")?.Value
+                    ?? httpContext.Request.Headers["X-Tenant"].ToString();
                 return Results.Problem(
                     statusCode: StatusCodes.Status404NotFound,
                     title: "Tenant not found.",
                     detail: string.IsNullOrWhiteSpace(tenant)
-                        ? "The X-Tenant header is required."
+                        ? "A practice or tenant token claim, or the X-Tenant header, is required."
                         : $"No tenant registration was found for '{tenant}'.");
             });
 
@@ -50,7 +54,8 @@ internal static class ProviderEndpoints
             .WithName("CreateProvider")
             .WithSummary("Creates a provider in the current practice tenant.")
             .Produces<ProviderModel>(StatusCodes.Status201Created)
-            .ProducesValidationProblem();
+            .ProducesValidationProblem()
+            .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin);
 
         group.MapGet("/{id:guid}", GetProviderAsync)
             .WithName("GetProvider")
@@ -63,13 +68,15 @@ internal static class ProviderEndpoints
             .WithSummary("Updates a provider's profile.")
             .Produces<ProviderModel>()
             .ProducesValidationProblem()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin);
 
         group.MapPost("/{id:guid}/deactivate", DeactivateProviderAsync)
             .WithName("DeactivateProvider")
             .WithSummary("Deactivates a provider.")
             .Produces<ProviderModel>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin);
 
         group.MapGet("/{id:guid}/availability-rules", GetAvailabilityRulesAsync)
             .WithName("GetProviderAvailabilityRules")
@@ -82,7 +89,8 @@ internal static class ProviderEndpoints
             .WithSummary("Replaces the provider's complete weekly availability rule set.")
             .Produces<IReadOnlyList<AvailabilityRuleModel>>()
             .ProducesValidationProblem()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin);
 
         group.MapGet(
                 "/{id:guid}/availability-exceptions",
@@ -100,7 +108,8 @@ internal static class ProviderEndpoints
             .Produces<AvailabilityExceptionModel>(StatusCodes.Status201Created)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound)
-            .ProducesProblem(StatusCodes.Status409Conflict);
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin);
 
         group.MapDelete(
                 "/{id:guid}/availability-exceptions",
@@ -109,7 +118,8 @@ internal static class ProviderEndpoints
             .WithSummary("Removes an availability exception by exceptionId query parameter.")
             .Produces(StatusCodes.Status204NoContent)
             .ProducesValidationProblem()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin);
 
         group.MapGet("/{id:guid}/slots", GetSlotsAsync)
             .WithName("GetProviderSlots")
@@ -122,13 +132,13 @@ internal static class ProviderEndpoints
     }
 
     private static async Task<IResult> ListProvidersAsync(
-        [FromHeader(Name = "X-Tenant")] string _tenant,
+        [FromHeader(Name = "X-Tenant")] string? _tenant,
         ISender sender,
         CancellationToken cancellationToken) =>
         Results.Ok(await sender.Send(new ListProvidersQuery(), cancellationToken));
 
     private static async Task<IResult> CreateProviderAsync(
-        [FromHeader(Name = "X-Tenant")] string _tenant,
+        [FromHeader(Name = "X-Tenant")] string? _tenant,
         ProviderRequest request,
         ISender sender,
         CancellationToken cancellationToken)
@@ -139,7 +149,7 @@ internal static class ProviderEndpoints
 
     private static async Task<IResult> GetProviderAsync(
         Guid id,
-        [FromHeader(Name = "X-Tenant")] string _tenant,
+        [FromHeader(Name = "X-Tenant")] string? _tenant,
         ISender sender,
         CancellationToken cancellationToken)
     {
@@ -154,7 +164,7 @@ internal static class ProviderEndpoints
 
     private static async Task<IResult> UpdateProviderAsync(
         Guid id,
-        [FromHeader(Name = "X-Tenant")] string _tenant,
+        [FromHeader(Name = "X-Tenant")] string? _tenant,
         ProviderRequest request,
         ISender sender,
         CancellationToken cancellationToken) =>
@@ -163,7 +173,7 @@ internal static class ProviderEndpoints
 
     private static async Task<IResult> DeactivateProviderAsync(
         Guid id,
-        [FromHeader(Name = "X-Tenant")] string _tenant,
+        [FromHeader(Name = "X-Tenant")] string? _tenant,
         ISender sender,
         CancellationToken cancellationToken) =>
         Results.Ok(
@@ -171,7 +181,7 @@ internal static class ProviderEndpoints
 
     private static async Task<IResult> GetAvailabilityRulesAsync(
         Guid id,
-        [FromHeader(Name = "X-Tenant")] string _tenant,
+        [FromHeader(Name = "X-Tenant")] string? _tenant,
         ISender sender,
         CancellationToken cancellationToken) =>
         Results.Ok(
@@ -181,7 +191,7 @@ internal static class ProviderEndpoints
 
     private static async Task<IResult> SetAvailabilityRulesAsync(
         Guid id,
-        [FromHeader(Name = "X-Tenant")] string _tenant,
+        [FromHeader(Name = "X-Tenant")] string? _tenant,
         SetAvailabilityRulesRequest request,
         ISender sender,
         CancellationToken cancellationToken)
@@ -198,7 +208,7 @@ internal static class ProviderEndpoints
 
     private static async Task<IResult> GetAvailabilityExceptionsAsync(
         Guid id,
-        [FromHeader(Name = "X-Tenant")] string _tenant,
+        [FromHeader(Name = "X-Tenant")] string? _tenant,
         ISender sender,
         CancellationToken cancellationToken) =>
         Results.Ok(
@@ -208,7 +218,7 @@ internal static class ProviderEndpoints
 
     private static async Task<IResult> AddAvailabilityExceptionAsync(
         Guid id,
-        [FromHeader(Name = "X-Tenant")] string _tenant,
+        [FromHeader(Name = "X-Tenant")] string? _tenant,
         AvailabilityExceptionRequest request,
         ISender sender,
         CancellationToken cancellationToken)
@@ -230,7 +240,7 @@ internal static class ProviderEndpoints
 
     private static async Task<IResult> RemoveAvailabilityExceptionAsync(
         Guid id,
-        [FromHeader(Name = "X-Tenant")] string _tenant,
+        [FromHeader(Name = "X-Tenant")] string? _tenant,
         [FromQuery] Guid exceptionId,
         ISender sender,
         CancellationToken cancellationToken)
@@ -244,7 +254,7 @@ internal static class ProviderEndpoints
 
     private static async Task<IResult> GetSlotsAsync(
         Guid id,
-        [FromHeader(Name = "X-Tenant")] string _tenant,
+        [FromHeader(Name = "X-Tenant")] string? _tenant,
         [FromQuery(Name = "from")] DateOnly fromDate,
         [FromQuery(Name = "to")] DateOnly toDate,
         ISender sender,

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 
 import { AyoosMark } from "@/components/ayoos-mark";
+import { UserMenu } from "@/components/user-menu";
 import {
   PracticeAddressFields,
   PracticeContactFields,
@@ -137,9 +138,12 @@ export default function PracticeSetupPage() {
       <div className="mx-auto max-w-6xl px-5 py-6 sm:px-8 sm:py-8">
         <header className="flex items-center justify-between">
           <AyoosMark />
-          <span className="rounded-full border border-teal-100 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-teal-700 shadow-sm">
-            Practice setup
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="hidden rounded-full border border-teal-100 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-teal-700 shadow-sm md:inline-flex">
+              Practice setup
+            </span>
+            <UserMenu />
+          </div>
         </header>
 
         <div className="mx-auto mt-10 max-w-3xl sm:mt-14">

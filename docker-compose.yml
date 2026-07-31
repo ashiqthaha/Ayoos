@@ -19,7 +19,7 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:latest
-    command: start-dev
+    command: ["start-dev", "--import-realm"]
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
@@ -27,6 +27,8 @@ services:
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-ayoos_dev_password}
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-ayoos_admin_dev_password}
+    volumes:
+      - ./infra/keycloak/realm-ayoos.json:/opt/keycloak/data/import/realm-ayoos.json:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,9 +43,15 @@ services:
       ASPNETCORE_URLS: http://+:8080
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__Default: Host=postgres;Port=5432;Database=${POSTGRES_DB:-ayoos};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-ayoos_dev_password}
+      Keycloak__Authority: ${KEYCLOAK_AUTHORITY:-http://localhost:8081/realms/ayoos}
+      Keycloak__MetadataAddress: ${KEYCLOAK_METADATA_ADDRESS:-http://keycloak:8080/realms/ayoos/.well-known/openid-configuration}
+      Keycloak__Audience: ${KEYCLOAK_AUDIENCE:-ayoos-api}
+      Keycloak__FrontendClientId: ${KEYCLOAK_FRONTEND_CLIENT_ID:-ayoos-frontend}
     depends_on:
       postgres:
         condition: service_healthy
+      keycloak:
+        condition: service_started
     ports:
       - "5000:8080"
 
@@ -53,8 +61,12 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:5000}
+        NEXT_PUBLIC_KEYCLOAK_AUTHORITY: ${KEYCLOAK_AUTHORITY:-http://localhost:8081/realms/ayoos}
+        NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: ${KEYCLOAK_FRONTEND_CLIENT_ID:-ayoos-frontend}
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:5000}
+      NEXT_PUBLIC_KEYCLOAK_AUTHORITY: ${KEYCLOAK_AUTHORITY:-http://localhost:8081/realms/ayoos}
+      NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: ${KEYCLOAK_FRONTEND_CLIENT_ID:-ayoos-frontend}
     depends_on:
       - api
     ports:

@@ -1,4 +1,5 @@
 import { ApiStatusCard } from "@/components/api-status-card";
+import { SessionHeaderAction } from "@/components/session-header-action";
 
 const capabilities = [
   "Practice management",
@@ -21,9 +22,7 @@ export default function Home() {
             </span>
             <span className="text-xl font-semibold tracking-[-0.03em]">Ayoos</span>
           </div>
-          <span className="rounded-full border border-[#176b4d]/15 bg-white/70 px-4 py-2 text-xs font-medium uppercase tracking-[0.16em] text-[#176b4d] backdrop-blur">
-            Open telehealth
-          </span>
+          <SessionHeaderAction />
         </header>
 
         <section className="grid flex-1 items-center gap-14 py-16 lg:grid-cols-[minmax(0,1fr)_26rem] lg:gap-24">
