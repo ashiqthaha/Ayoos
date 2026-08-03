@@ -61,6 +61,7 @@ internal sealed class AddAvailabilityExceptionCommandHandler(
 
         var exception = AvailabilityException.Create(
             provider.Id,
+            provider.PracticeId.ToString("D"),
             request.Date,
             request.IsUnavailable,
             request.OverrideStartTime,

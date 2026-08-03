@@ -32,6 +32,7 @@ public static class DependencyInjection
         services.AddScoped<IPracticeRepository, PracticeRepository>();
         services.AddScoped<IProviderRepository, ProviderRepository>();
         services.AddScoped<IPatientRepository, PatientRepository>();
+        services.AddScoped<IBookingRepository, BookingRepository>();
         services.AddScoped<ICurrentPracticeContext, CurrentPracticeContext>();
         services.AddScoped<IPracticeProvisioner, PracticeProvisioner>();
         services.AddScoped<ITenantRegistry, TenantRegistry>();

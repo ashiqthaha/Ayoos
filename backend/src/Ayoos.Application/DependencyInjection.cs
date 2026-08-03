@@ -1,4 +1,10 @@
 using Ayoos.Application.Common.Behaviors;
+using Ayoos.Application.Bookings.CancelBooking;
+using Ayoos.Application.Bookings.CompleteBooking;
+using Ayoos.Application.Bookings.ConfirmBooking;
+using Ayoos.Application.Bookings.CreateBooking;
+using Ayoos.Application.Bookings.GetProviderSchedule;
+using Ayoos.Application.Bookings.MarkNoShow;
 using Ayoos.Application.Practices.CreatePractice;
 using Ayoos.Application.Practices.UpdatePractice;
 using Ayoos.Application.Patients.DeactivatePatient;
@@ -7,11 +13,13 @@ using Ayoos.Application.Patients.RegisterPatient;
 using Ayoos.Application.Patients.UpdatePatient;
 using Ayoos.Application.Providers;
 using Ayoos.Application.Providers.AddAvailabilityException;
+using Ayoos.Application.Providers.CreateAvailability;
 using Ayoos.Application.Providers.CreateProvider;
+using Ayoos.Application.Providers.DeactivateAvailability;
 using Ayoos.Application.Providers.DeactivateProvider;
-using Ayoos.Application.Providers.GetProviderAvailability;
+using Ayoos.Application.Providers.GetAvailableSlots;
 using Ayoos.Application.Providers.RemoveAvailabilityException;
-using Ayoos.Application.Providers.SetAvailabilityRules;
+using Ayoos.Application.Providers.UpdateAvailability;
 using Ayoos.Application.Providers.UpdateProvider;
 using FluentValidation;
 using MediatR;
@@ -45,8 +53,14 @@ public static class DependencyInjection
             IValidator<DeactivateProviderCommand>,
             DeactivateProviderCommandValidator>();
         services.AddScoped<
-            IValidator<SetAvailabilityRulesCommand>,
-            SetAvailabilityRulesCommandValidator>();
+            IValidator<CreateAvailabilityCommand>,
+            CreateAvailabilityCommandValidator>();
+        services.AddScoped<
+            IValidator<UpdateAvailabilityCommand>,
+            UpdateAvailabilityCommandValidator>();
+        services.AddScoped<
+            IValidator<DeactivateAvailabilityCommand>,
+            DeactivateAvailabilityCommandValidator>();
         services.AddScoped<
             IValidator<AddAvailabilityExceptionCommand>,
             AddAvailabilityExceptionCommandValidator>();
@@ -54,8 +68,16 @@ public static class DependencyInjection
             IValidator<RemoveAvailabilityExceptionCommand>,
             RemoveAvailabilityExceptionCommandValidator>();
         services.AddScoped<
-            IValidator<GetProviderAvailabilityQuery>,
-            GetProviderAvailabilityQueryValidator>();
+            IValidator<GetAvailableSlotsQuery>,
+            GetAvailableSlotsQueryValidator>();
+        services.AddScoped<IValidator<CreateBookingCommand>, CreateBookingCommandValidator>();
+        services.AddScoped<IValidator<ConfirmBookingCommand>, ConfirmBookingCommandValidator>();
+        services.AddScoped<IValidator<CancelBookingCommand>, CancelBookingCommandValidator>();
+        services.AddScoped<IValidator<CompleteBookingCommand>, CompleteBookingCommandValidator>();
+        services.AddScoped<IValidator<MarkNoShowCommand>, MarkNoShowCommandValidator>();
+        services.AddScoped<
+            IValidator<GetProviderScheduleQuery>,
+            GetProviderScheduleQueryValidator>();
         services.AddSingleton<AvailabilitySlotGenerator>();
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 

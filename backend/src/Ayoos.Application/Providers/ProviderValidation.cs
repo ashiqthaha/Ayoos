@@ -42,20 +42,23 @@ internal static class ProviderValidation
     }
 }
 
-public sealed class AvailabilityRuleInputValidator : AbstractValidator<AvailabilityRuleInput>
+internal static class AvailabilityValidation
 {
-    public AvailabilityRuleInputValidator()
+    public static void AddScheduleRules<T>(
+        AbstractValidator<T> validator,
+        Expression<Func<T, Guid>> providerId,
+        Expression<Func<T, DayOfWeek>> dayOfWeek,
+        Expression<Func<T, TimeOnly>> startTime,
+        Expression<Func<T, TimeOnly>> endTime,
+        Expression<Func<T, int>> slotDurationMinutes)
     {
-        RuleFor(rule => rule.DayOfWeek).IsInEnum();
-        RuleFor(rule => rule.EndTime)
-            .GreaterThan(rule => rule.StartTime)
+        validator.RuleFor(providerId).NotEmpty().WithName("ProviderId");
+        validator.RuleFor(dayOfWeek).IsInEnum().WithName("DayOfWeek");
+        validator.RuleFor(endTime)
+            .GreaterThan(startTime)
             .WithMessage("EndTime must be after StartTime.");
-        RuleFor(rule => rule.SlotDurationMinutes)
-            .InclusiveBetween(1, 1440);
-        RuleFor(rule => rule.EffectiveFrom).NotEmpty();
-        RuleFor(rule => rule.EffectiveTo)
-            .Must((rule, effectiveTo) =>
-                effectiveTo is null || effectiveTo >= rule.EffectiveFrom)
-            .WithMessage("EffectiveTo must be on or after EffectiveFrom.");
+        validator.RuleFor(slotDurationMinutes)
+            .InclusiveBetween(1, 1440)
+            .WithName("SlotDurationMinutes");
     }
 }

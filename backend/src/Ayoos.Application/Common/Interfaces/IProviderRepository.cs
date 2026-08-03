@@ -16,10 +16,21 @@ public interface IProviderRepository
         Provider provider,
         CancellationToken cancellationToken = default);
 
-    void RemoveAvailabilityRules(IEnumerable<AvailabilityRule> rules);
+    Task<AvailabilitySchedule?> GetAvailabilityScheduleAsync(
+        Guid providerId,
+        Guid availabilityId,
+        CancellationToken cancellationToken = default);
 
-    Task AddAvailabilityRulesAsync(
-        IEnumerable<AvailabilityRule> rules,
+    Task<bool> HasAvailabilityOverlapAsync(
+        Guid providerId,
+        DayOfWeek dayOfWeek,
+        TimeOnly startTime,
+        TimeOnly endTime,
+        Guid? excludeAvailabilityId = null,
+        CancellationToken cancellationToken = default);
+
+    Task AddAvailabilityScheduleAsync(
+        AvailabilitySchedule schedule,
         CancellationToken cancellationToken = default);
 
     Task AddAvailabilityExceptionAsync(

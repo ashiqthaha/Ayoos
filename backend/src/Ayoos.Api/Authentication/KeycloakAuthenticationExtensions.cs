@@ -59,6 +59,9 @@ internal static class KeycloakAuthenticationExtensions
                 AuthorizationPolicies.ProviderOnly,
                 policy => policy.RequireRole("provider"))
             .AddPolicy(
+                AuthorizationPolicies.ProviderOrAdmin,
+                policy => policy.RequireRole("provider", "practice-admin"))
+            .AddPolicy(
                 AuthorizationPolicies.PatientOnly,
                 policy => policy.RequireRole("patient"))
             .AddPolicy(

@@ -1,11 +1,6 @@
-using Ayoos.Application.Providers;
-using Ayoos.Application.Providers.AddAvailabilityException;
-using Ayoos.Application.Providers.RemoveAvailabilityException;
-using Ayoos.Application.Providers.SetAvailabilityRules;
 using Ayoos.Domain.Practices;
 using Ayoos.Domain.Providers;
 using Ayoos.Infrastructure.Persistence;
-using Ayoos.Infrastructure.Repositories;
 using Finbuckle.MultiTenant.Abstractions;
 using Finbuckle.MultiTenant.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -15,138 +10,86 @@ namespace Ayoos.UnitTests;
 
 public sealed class ProviderTenantPersistenceTests
 {
-    private readonly Practice _practice = CreatePractice();
-    private readonly string _databaseName = Guid.NewGuid().ToString("N");
-    private readonly InMemoryDatabaseRoot _databaseRoot = new();
-
     [Fact]
-    public async Task Setting_rules_twice_replaces_tenant_scoped_entities()
+    public async Task Availability_entities_persist_tenant_id_and_are_tenant_isolated()
     {
-        var providerId = await SeedProviderAsync();
-        var effectiveFrom = new DateOnly(2026, 8, 1);
+        var practice = CreatePractice("first-practice");
+        var otherPractice = CreatePractice("other-practice");
+        var databaseName = Guid.NewGuid().ToString("N");
+        var databaseRoot = new InMemoryDatabaseRoot();
+        var tenantId = practice.Id.ToString("D");
+        Guid providerId;
 
-        await SetRulesAsync(
-            providerId,
-            [
-                Rule(DayOfWeek.Monday, 9, 12, effectiveFrom),
-                Rule(DayOfWeek.Tuesday, 10, 14, effectiveFrom)
-            ]);
-
-        await using (var firstRead = CreateContext())
+        await using (var context = CreateContext(practice, databaseName, databaseRoot))
         {
-            AssertMultiTenantMetadata(firstRead);
-            var stored = await ReadRulesWithTenantIdAsync(firstRead, providerId);
+            var provider = CreateProvider(practice.Id);
+            providerId = provider.Id;
+            var schedule = AvailabilitySchedule.Create(
+                provider.Id,
+                tenantId,
+                DayOfWeek.Monday,
+                new TimeOnly(9, 0),
+                new TimeOnly(12, 0),
+                30);
+            var exception = AvailabilityException.Create(
+                provider.Id,
+                tenantId,
+                new DateOnly(2026, 8, 10),
+                true,
+                null,
+                null,
+                "Conference");
 
-            Assert.Equal(2, stored.Count);
-            Assert.All(stored, row => Assert.Equal(TenantId, row.TenantId));
+            context.Practices.Add(practice);
+            context.Providers.Add(provider);
+            context.AvailabilitySchedules.Add(schedule);
+            context.AvailabilityExceptions.Add(exception);
+            await context.SaveChangesAsync();
         }
 
-        await SetRulesAsync(
-            providerId,
-            [
-                Rule(DayOfWeek.Wednesday, 8, 11, effectiveFrom),
-                Rule(DayOfWeek.Friday, 13, 17, effectiveFrom)
-            ]);
+        await using (var sameTenant = CreateContext(
+            practice,
+            databaseName,
+            databaseRoot))
+        {
+            Assert.NotNull(sameTenant.Model
+                .FindEntityType(typeof(AvailabilitySchedule))?
+                .FindProperty(nameof(AvailabilitySchedule.TenantId)));
+            Assert.NotNull(sameTenant.Model
+                .FindEntityType(typeof(AvailabilityException))?
+                .FindProperty(nameof(AvailabilityException.TenantId)));
 
-        await using var secondRead = CreateContext();
-        var replacements = await ReadRulesWithTenantIdAsync(secondRead, providerId);
+            var schedule = await sameTenant.AvailabilitySchedules.SingleAsync();
+            var exception = await sameTenant.AvailabilityExceptions.SingleAsync();
+            Assert.Equal(tenantId, schedule.TenantId);
+            Assert.Equal(tenantId, exception.TenantId);
+            Assert.Equal(providerId, schedule.ProviderId);
+        }
 
-        Assert.Collection(
-            replacements.OrderBy(row => row.Rule.DayOfWeek),
-            row =>
-            {
-                Assert.Equal(DayOfWeek.Wednesday, row.Rule.DayOfWeek);
-                Assert.Equal(TenantId, row.TenantId);
-            },
-            row =>
-            {
-                Assert.Equal(DayOfWeek.Friday, row.Rule.DayOfWeek);
-                Assert.Equal(TenantId, row.TenantId);
-            });
+        await using var otherTenant = CreateContext(
+            otherPractice,
+            databaseName,
+            databaseRoot);
+        Assert.Empty(await otherTenant.AvailabilitySchedules.ToListAsync());
+        Assert.Empty(await otherTenant.AvailabilityExceptions.ToListAsync());
+        Assert.Single(await otherTenant.AvailabilitySchedules
+            .IgnoreQueryFilters()
+            .ToListAsync());
     }
 
-    [Fact]
-    public async Task Adding_and_removing_exception_preserves_tenant_enforcement()
-    {
-        var providerId = await SeedProviderAsync();
-        var date = new DateOnly(2026, 8, 7);
-        Guid exceptionId;
+    private static Practice CreatePractice(string slug) =>
+        Practice.Create(
+            "Tenant Under Test",
+            slug,
+            "America/New_York",
+            new Address("100 Main Street", null, "New York", "NY", "10001", "US"),
+            "practice@example.com",
+            "+1-212-555-0100",
+            DateTimeOffset.UtcNow);
 
-        await using (var addContext = CreateContext())
-        {
-            var handler = new AddAvailabilityExceptionCommandHandler(
-                new ProviderRepository(addContext));
-            var result = await handler.Handle(
-                new AddAvailabilityExceptionCommand(
-                    providerId,
-                    date,
-                    true,
-                    null,
-                    null,
-                    "Conference"),
-                CancellationToken.None);
-            exceptionId = result.Id;
-        }
-
-        await using (var readContext = CreateContext())
-        {
-            var stored = await readContext.AvailabilityExceptions
-                .IgnoreQueryFilters()
-                .Where(item => item.ProviderId == providerId)
-                .Select(item => new
-                {
-                    Exception = item,
-                    TenantId = EF.Property<string>(item, "TenantId")
-                })
-                .SingleAsync();
-
-            Assert.Equal(exceptionId, stored.Exception.Id);
-            Assert.Equal(TenantId, stored.TenantId);
-        }
-
-        await using (var removeContext = CreateContext())
-        {
-            var handler = new RemoveAvailabilityExceptionCommandHandler(
-                new ProviderRepository(removeContext));
-            await handler.Handle(
-                new RemoveAvailabilityExceptionCommand(providerId, exceptionId),
-                CancellationToken.None);
-        }
-
-        await using var finalContext = CreateContext();
-        Assert.Empty(
-            await finalContext.AvailabilityExceptions
-                .IgnoreQueryFilters()
-                .Where(item => item.ProviderId == providerId)
-                .ToListAsync());
-    }
-
-    private Guid PracticeId => _practice.Id;
-
-    private string TenantId => PracticeId.ToString("D");
-
-    private AyoosDbContext CreateContext()
-    {
-        var options = new DbContextOptionsBuilder<AyoosDbContext>()
-            .UseInMemoryDatabase(_databaseName, _databaseRoot)
-            .Options;
-        var tenant = new TenantInfo
-        {
-            Id = TenantId,
-            Identifier = "tenant-under-test",
-            Name = "Tenant Under Test"
-        };
-
-        return MultiTenantDbContext.Create<AyoosDbContext, TenantInfo>(
-            tenant,
-            options);
-    }
-
-    private async Task<Guid> SeedProviderAsync()
-    {
-        await using var context = CreateContext();
-        var provider = Provider.Create(
-            PracticeId,
+    private static Provider CreateProvider(Guid practiceId) =>
+        Provider.Create(
+            practiceId,
             "Maya",
             "Patel",
             "MD",
@@ -155,69 +98,23 @@ public sealed class ProviderTenantPersistenceTests
             "+1-212-555-0101",
             DateTimeOffset.UtcNow);
 
-        context.Practices.Add(_practice);
-        context.Providers.Add(provider);
-        await context.SaveChangesAsync();
-
-        return provider.Id;
-    }
-
-    private async Task SetRulesAsync(
-        Guid providerId,
-        IReadOnlyList<AvailabilityRuleInput> rules)
+    private static AyoosDbContext CreateContext(
+        Practice practice,
+        string databaseName,
+        InMemoryDatabaseRoot databaseRoot)
     {
-        await using var context = CreateContext();
-        var handler = new SetAvailabilityRulesCommandHandler(
-            new ProviderRepository(context));
+        var options = new DbContextOptionsBuilder<AyoosDbContext>()
+            .UseInMemoryDatabase(databaseName, databaseRoot)
+            .Options;
+        var tenant = new TenantInfo
+        {
+            Id = practice.Id.ToString("D"),
+            Identifier = practice.Slug,
+            Name = practice.Name
+        };
 
-        await handler.Handle(
-            new SetAvailabilityRulesCommand(providerId, rules),
-            CancellationToken.None);
+        return MultiTenantDbContext.Create<AyoosDbContext, TenantInfo>(
+            tenant,
+            options);
     }
-
-    private static AvailabilityRuleInput Rule(
-        DayOfWeek day,
-        int startHour,
-        int endHour,
-        DateOnly effectiveFrom) =>
-        new(
-            day,
-            new TimeOnly(startHour, 0),
-            new TimeOnly(endHour, 0),
-            30,
-            effectiveFrom,
-            null);
-
-    private static Practice CreatePractice() =>
-        Practice.Create(
-            "Tenant Under Test",
-            "tenant-under-test",
-            "America/New_York",
-            new Address("100 Main Street", null, "New York", "NY", "10001", "US"),
-            "practice@example.com",
-            "+1-212-555-0100",
-            DateTimeOffset.UtcNow);
-
-    private static async Task<List<StoredRule>> ReadRulesWithTenantIdAsync(
-        AyoosDbContext context,
-        Guid providerId) =>
-        await context.AvailabilityRules
-            .IgnoreQueryFilters()
-            .Where(rule => rule.ProviderId == providerId)
-            .Select(rule => new StoredRule(
-                rule,
-                EF.Property<string>(rule, "TenantId")))
-            .ToListAsync();
-
-    private static void AssertMultiTenantMetadata(AyoosDbContext context)
-    {
-        Assert.NotNull(
-            context.Model.FindEntityType(typeof(AvailabilityRule))?
-                .FindProperty("TenantId"));
-        Assert.NotNull(
-            context.Model.FindEntityType(typeof(AvailabilityException))?
-                .FindProperty("TenantId"));
-    }
-
-    private sealed record StoredRule(AvailabilityRule Rule, string TenantId);
 }

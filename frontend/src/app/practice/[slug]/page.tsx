@@ -264,6 +264,12 @@ export default function PracticeDashboardPage() {
                 >
                   Manage providers
                 </Link>
+                <Link
+                  href={`/practice/${encodeURIComponent(practice.slug)}/bookings`}
+                  className="inline-flex w-fit items-center justify-center rounded-xl border border-teal-200 bg-white px-5 py-3 text-sm font-semibold text-teal-800 transition hover:bg-teal-50 focus:outline-none focus:ring-4 focus:ring-teal-500/15"
+                >
+                  Manage bookings
+                </Link>
                 <button
                   type="button"
                   onClick={() => {

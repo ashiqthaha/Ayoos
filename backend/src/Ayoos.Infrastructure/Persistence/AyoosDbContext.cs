@@ -1,3 +1,4 @@
+using Ayoos.Domain.Bookings;
 using Ayoos.Domain.Practices;
 using Ayoos.Domain.Patients;
 using Ayoos.Domain.Providers;
@@ -21,10 +22,13 @@ public sealed class AyoosDbContext(
 
     public DbSet<EmergencyContact> EmergencyContacts => Set<EmergencyContact>();
 
-    public DbSet<AvailabilityRule> AvailabilityRules => Set<AvailabilityRule>();
+    public DbSet<AvailabilitySchedule> AvailabilitySchedules =>
+        Set<AvailabilitySchedule>();
 
     public DbSet<AvailabilityException> AvailabilityExceptions =>
         Set<AvailabilityException>();
+
+    public DbSet<Booking> Bookings => Set<Booking>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -34,7 +38,8 @@ public sealed class AyoosDbContext(
         modelBuilder.Entity<Provider>().IsMultiTenant();
         modelBuilder.Entity<Patient>().IsMultiTenant();
         modelBuilder.Entity<EmergencyContact>().IsMultiTenant();
-        modelBuilder.Entity<AvailabilityRule>().IsMultiTenant();
+        modelBuilder.Entity<AvailabilitySchedule>().IsMultiTenant();
         modelBuilder.Entity<AvailabilityException>().IsMultiTenant();
+        modelBuilder.Entity<Booking>().IsMultiTenant();
     }
 }

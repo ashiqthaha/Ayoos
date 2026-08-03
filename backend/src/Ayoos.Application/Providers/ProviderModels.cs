@@ -14,23 +14,15 @@ public sealed record ProviderModel(
     bool IsActive,
     DateTimeOffset CreatedAtUtc);
 
-public sealed record AvailabilityRuleInput(
-    DayOfWeek DayOfWeek,
-    TimeOnly StartTime,
-    TimeOnly EndTime,
-    int SlotDurationMinutes,
-    DateOnly EffectiveFrom,
-    DateOnly? EffectiveTo);
-
-public sealed record AvailabilityRuleModel(
+public sealed record AvailabilityScheduleModel(
     Guid Id,
     Guid ProviderId,
+    string TenantId,
     DayOfWeek DayOfWeek,
     TimeOnly StartTime,
     TimeOnly EndTime,
     int SlotDurationMinutes,
-    DateOnly EffectiveFrom,
-    DateOnly? EffectiveTo);
+    bool IsActive);
 
 public sealed record AvailabilityExceptionModel(
     Guid Id,
@@ -45,7 +37,13 @@ public sealed record AvailabilitySlotModel(
     DateOnly Date,
     TimeOnly StartTime,
     TimeOnly EndTime,
-    int DurationMinutes);
+    int DurationMinutes,
+    Guid? AvailabilityScheduleId);
+
+public sealed record ProviderAvailabilityModel(
+    Guid ProviderId,
+    IReadOnlyList<AvailabilityScheduleModel> Schedules,
+    IReadOnlyList<AvailabilityExceptionModel> Exceptions);
 
 internal static class ProviderMappings
 {
@@ -62,16 +60,17 @@ internal static class ProviderMappings
             provider.IsActive,
             provider.CreatedAtUtc);
 
-    public static AvailabilityRuleModel ToModel(this AvailabilityRule rule) =>
+    public static AvailabilityScheduleModel ToModel(
+        this AvailabilitySchedule schedule) =>
         new(
-            rule.Id,
-            rule.ProviderId,
-            rule.DayOfWeek,
-            rule.StartTime,
-            rule.EndTime,
-            rule.SlotDurationMinutes,
-            rule.EffectiveFrom,
-            rule.EffectiveTo);
+            schedule.Id,
+            schedule.ProviderId,
+            schedule.TenantId,
+            schedule.DayOfWeek,
+            schedule.StartTime,
+            schedule.EndTime,
+            schedule.SlotDurationMinutes,
+            schedule.IsActive);
 
     public static AvailabilityExceptionModel ToModel(
         this AvailabilityException exception) =>

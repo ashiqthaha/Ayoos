@@ -12,6 +12,7 @@ public sealed class AvailabilityException : Entity
     private AvailabilityException(
         Guid id,
         Guid providerId,
+        string tenantId,
         DateOnly date,
         bool isUnavailable,
         TimeOnly? overrideStartTime,
@@ -20,6 +21,7 @@ public sealed class AvailabilityException : Entity
         : base(id)
     {
         ProviderId = providerId;
+        TenantId = tenantId;
         Date = date;
         IsUnavailable = isUnavailable;
         OverrideStartTime = overrideStartTime;
@@ -28,6 +30,8 @@ public sealed class AvailabilityException : Entity
     }
 
     public Guid ProviderId { get; private set; }
+
+    public string TenantId { get; private set; } = string.Empty;
 
     public DateOnly Date { get; private set; }
 
@@ -41,6 +45,7 @@ public sealed class AvailabilityException : Entity
 
     public static AvailabilityException Create(
         Guid providerId,
+        string tenantId,
         DateOnly date,
         bool isUnavailable,
         TimeOnly? overrideStartTime,
@@ -48,6 +53,7 @@ public sealed class AvailabilityException : Entity
         string? reason)
     {
         ArgumentOutOfRangeException.ThrowIfEqual(providerId, Guid.Empty);
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
 
         if (isUnavailable && (overrideStartTime is not null || overrideEndTime is not null))
         {
@@ -67,6 +73,7 @@ public sealed class AvailabilityException : Entity
         return new AvailabilityException(
             Guid.NewGuid(),
             providerId,
+            tenantId.Trim(),
             date,
             isUnavailable,
             overrideStartTime,

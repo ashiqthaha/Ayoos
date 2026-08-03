@@ -25,7 +25,7 @@ internal sealed class ProviderRepository(AyoosDbContext dbContext)
         if (includeAvailability)
         {
             query = query
-                .Include(provider => provider.AvailabilityRules)
+                .Include(provider => provider.AvailabilitySchedules)
                 .Include(provider => provider.AvailabilityExceptions);
         }
 
@@ -39,16 +39,39 @@ internal sealed class ProviderRepository(AyoosDbContext dbContext)
         await dbContext.Providers.AddAsync(provider, cancellationToken);
     }
 
-    public void RemoveAvailabilityRules(IEnumerable<AvailabilityRule> rules)
-    {
-        dbContext.AvailabilityRules.RemoveRange(rules);
-    }
+    public Task<AvailabilitySchedule?> GetAvailabilityScheduleAsync(
+        Guid providerId,
+        Guid availabilityId,
+        CancellationToken cancellationToken = default) =>
+        dbContext.AvailabilitySchedules.SingleOrDefaultAsync(
+            schedule =>
+                schedule.ProviderId == providerId &&
+                schedule.Id == availabilityId,
+            cancellationToken);
 
-    public async Task AddAvailabilityRulesAsync(
-        IEnumerable<AvailabilityRule> rules,
+    public Task<bool> HasAvailabilityOverlapAsync(
+        Guid providerId,
+        DayOfWeek dayOfWeek,
+        TimeOnly startTime,
+        TimeOnly endTime,
+        Guid? excludeAvailabilityId = null,
+        CancellationToken cancellationToken = default) =>
+        dbContext.AvailabilitySchedules.AnyAsync(
+            schedule =>
+                schedule.ProviderId == providerId &&
+                schedule.IsActive &&
+                schedule.DayOfWeek == dayOfWeek &&
+                schedule.StartTime < endTime &&
+                schedule.EndTime > startTime &&
+                (!excludeAvailabilityId.HasValue ||
+                    schedule.Id != excludeAvailabilityId.Value),
+            cancellationToken);
+
+    public async Task AddAvailabilityScheduleAsync(
+        AvailabilitySchedule schedule,
         CancellationToken cancellationToken = default)
     {
-        await dbContext.AvailabilityRules.AddRangeAsync(rules, cancellationToken);
+        await dbContext.AvailabilitySchedules.AddAsync(schedule, cancellationToken);
     }
 
     public async Task AddAvailabilityExceptionAsync(

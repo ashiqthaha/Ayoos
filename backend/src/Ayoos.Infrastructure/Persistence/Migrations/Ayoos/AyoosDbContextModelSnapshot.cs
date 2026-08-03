@@ -22,6 +22,63 @@ namespace Ayoos.Infrastructure.Persistence.Migrations.Ayoos
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Ayoos.Domain.Bookings.Booking", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AvailabilityScheduleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("EndTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProviderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset>("StartTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AvailabilityScheduleId");
+
+                    b.HasIndex("PatientId");
+
+                    b.HasIndex("ProviderId");
+
+                    b.HasIndex("TenantId", "PatientId", "StartTime");
+
+                    b.HasIndex("TenantId", "ProviderId", "StartTime", "EndTime", "Status");
+
+                    b.ToTable("Bookings", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Bookings_StartBeforeEnd", "\"StartTime\" < \"EndTime\"");
+                        });
+
+                    b.HasAnnotation("Finbuckle:MultiTenant", true);
+                });
+
             modelBuilder.Entity("Ayoos.Domain.Patients.EmergencyContact", b =>
                 {
                     b.Property<Guid>("Id")
@@ -215,7 +272,9 @@ namespace Ayoos.Infrastructure.Persistence.Migrations.Ayoos
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ProviderId", "Date")
+                    b.HasIndex("ProviderId");
+
+                    b.HasIndex("TenantId", "ProviderId", "Date")
                         .IsUnique();
 
                     b.ToTable("AvailabilityExceptions", (string)null);
@@ -223,7 +282,7 @@ namespace Ayoos.Infrastructure.Persistence.Migrations.Ayoos
                     b.HasAnnotation("Finbuckle:MultiTenant", true);
                 });
 
-            modelBuilder.Entity("Ayoos.Domain.Providers.AvailabilityRule", b =>
+            modelBuilder.Entity("Ayoos.Domain.Providers.AvailabilitySchedule", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -232,14 +291,11 @@ namespace Ayoos.Infrastructure.Persistence.Migrations.Ayoos
                     b.Property<int>("DayOfWeek")
                         .HasColumnType("integer");
 
-                    b.Property<DateOnly>("EffectiveFrom")
-                        .HasColumnType("date");
-
-                    b.Property<DateOnly?>("EffectiveTo")
-                        .HasColumnType("date");
-
                     b.Property<TimeOnly>("EndTime")
                         .HasColumnType("time without time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
 
                     b.Property<Guid>("ProviderId")
                         .HasColumnType("uuid");
@@ -258,9 +314,11 @@ namespace Ayoos.Infrastructure.Persistence.Migrations.Ayoos
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ProviderId", "DayOfWeek");
+                    b.HasIndex("ProviderId");
 
-                    b.ToTable("AvailabilityRules", (string)null);
+                    b.HasIndex("TenantId", "ProviderId", "DayOfWeek", "IsActive");
+
+                    b.ToTable("AvailabilitySchedules", (string)null);
 
                     b.HasAnnotation("Finbuckle:MultiTenant", true);
                 });
@@ -323,6 +381,26 @@ namespace Ayoos.Infrastructure.Persistence.Migrations.Ayoos
                     b.ToTable("Providers", (string)null);
 
                     b.HasAnnotation("Finbuckle:MultiTenant", true);
+                });
+
+            modelBuilder.Entity("Ayoos.Domain.Bookings.Booking", b =>
+                {
+                    b.HasOne("Ayoos.Domain.Providers.AvailabilitySchedule", null)
+                        .WithMany()
+                        .HasForeignKey("AvailabilityScheduleId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Ayoos.Domain.Patients.Patient", null)
+                        .WithMany()
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Ayoos.Domain.Providers.Provider", null)
+                        .WithMany()
+                        .HasForeignKey("ProviderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Ayoos.Domain.Patients.EmergencyContact", b =>
@@ -457,10 +535,10 @@ namespace Ayoos.Infrastructure.Persistence.Migrations.Ayoos
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Ayoos.Domain.Providers.AvailabilityRule", b =>
+            modelBuilder.Entity("Ayoos.Domain.Providers.AvailabilitySchedule", b =>
                 {
                     b.HasOne("Ayoos.Domain.Providers.Provider", null)
-                        .WithMany("AvailabilityRules")
+                        .WithMany("AvailabilitySchedules")
                         .HasForeignKey("ProviderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -484,7 +562,7 @@ namespace Ayoos.Infrastructure.Persistence.Migrations.Ayoos
                 {
                     b.Navigation("AvailabilityExceptions");
 
-                    b.Navigation("AvailabilityRules");
+                    b.Navigation("AvailabilitySchedules");
                 });
 #pragma warning restore 612, 618
         }

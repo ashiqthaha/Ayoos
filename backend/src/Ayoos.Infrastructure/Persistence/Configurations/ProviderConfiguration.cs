@@ -30,9 +30,9 @@ internal sealed class ProviderConfiguration : IEntityTypeConfiguration<Provider>
             .HasForeignKey(provider => provider.PracticeId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasMany(provider => provider.AvailabilityRules)
+        builder.HasMany(provider => provider.AvailabilitySchedules)
             .WithOne()
-            .HasForeignKey(rule => rule.ProviderId)
+            .HasForeignKey(schedule => schedule.ProviderId)
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasMany(provider => provider.AvailabilityExceptions)
@@ -40,7 +40,7 @@ internal sealed class ProviderConfiguration : IEntityTypeConfiguration<Provider>
             .HasForeignKey(exception => exception.ProviderId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.Navigation(provider => provider.AvailabilityRules)
+        builder.Navigation(provider => provider.AvailabilitySchedules)
             .UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(provider => provider.AvailabilityExceptions)
             .UsePropertyAccessMode(PropertyAccessMode.Field);

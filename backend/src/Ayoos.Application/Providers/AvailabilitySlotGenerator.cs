@@ -5,7 +5,7 @@ namespace Ayoos.Application.Providers;
 public sealed class AvailabilitySlotGenerator
 {
     public IReadOnlyList<AvailabilitySlotModel> Generate(
-        IReadOnlyCollection<AvailabilityRule> rules,
+        IReadOnlyCollection<AvailabilitySchedule> schedules,
         IReadOnlyCollection<AvailabilityException> exceptions,
         DateOnly fromDate,
         DateOnly toDate)
@@ -26,34 +26,35 @@ public sealed class AvailabilitySlotGenerator
                 continue;
             }
 
-            var dailyRules = rules
-                .Where(rule =>
-                    rule.DayOfWeek == date.DayOfWeek &&
-                    rule.EffectiveFrom <= date &&
-                    (rule.EffectiveTo is null || rule.EffectiveTo >= date))
-                .OrderBy(rule => rule.StartTime)
+            var dailySchedules = schedules
+                .Where(schedule =>
+                    schedule.IsActive &&
+                    schedule.DayOfWeek == date.DayOfWeek)
+                .OrderBy(schedule => schedule.StartTime)
                 .ToArray();
 
             if (exception is not null)
             {
-                var duration = dailyRules.FirstOrDefault()?.SlotDurationMinutes ?? 30;
+                var duration = dailySchedules.FirstOrDefault()?.SlotDurationMinutes ?? 30;
                 AddSlots(
                     slots,
                     date,
                     exception.OverrideStartTime!.Value,
                     exception.OverrideEndTime!.Value,
-                    duration);
+                    duration,
+                    null);
                 continue;
             }
 
-            foreach (var rule in dailyRules)
+            foreach (var schedule in dailySchedules)
             {
                 AddSlots(
                     slots,
                     date,
-                    rule.StartTime,
-                    rule.EndTime,
-                    rule.SlotDurationMinutes);
+                    schedule.StartTime,
+                    schedule.EndTime,
+                    schedule.SlotDurationMinutes,
+                    schedule.Id);
             }
         }
 
@@ -65,7 +66,8 @@ public sealed class AvailabilitySlotGenerator
         DateOnly date,
         TimeOnly startTime,
         TimeOnly endTime,
-        int durationMinutes)
+        int durationMinutes,
+        Guid? availabilityScheduleId)
     {
         var duration = TimeSpan.FromMinutes(durationMinutes);
         var cursor = startTime.ToTimeSpan();
@@ -80,7 +82,8 @@ public sealed class AvailabilitySlotGenerator
                     date,
                     slotStart,
                     slotEnd,
-                    durationMinutes));
+                    durationMinutes,
+                    availabilityScheduleId));
             cursor += duration;
         }
     }

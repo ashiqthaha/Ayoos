@@ -128,18 +128,26 @@ export default function ProvidersPage() {
                 changes.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setShowForm(true);
-                setForm(providerCopy());
-                setErrors({});
-                setSaveError(null);
-              }}
-              className="inline-flex w-fit items-center justify-center rounded-xl bg-teal-700 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-700/15 transition hover:bg-teal-800 focus:outline-none focus:ring-4 focus:ring-teal-500/20"
-            >
-              Add provider
-            </button>
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href={`/practice/${encodeURIComponent(slug)}/providers/availability`}
+                className="inline-flex w-fit items-center justify-center rounded-xl border border-teal-200 bg-white px-5 py-3 text-sm font-semibold text-teal-800 transition hover:bg-teal-50"
+              >
+                Manage availability
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForm(true);
+                  setForm(providerCopy());
+                  setErrors({});
+                  setSaveError(null);
+                }}
+                className="inline-flex w-fit items-center justify-center rounded-xl bg-teal-700 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-700/15 transition hover:bg-teal-800 focus:outline-none focus:ring-4 focus:ring-teal-500/20"
+              >
+                Add provider
+              </button>
+            </div>
           </div>
 
           {showForm && (

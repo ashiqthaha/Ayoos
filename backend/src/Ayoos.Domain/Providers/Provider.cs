@@ -4,7 +4,7 @@ namespace Ayoos.Domain.Providers;
 
 public sealed class Provider : Entity
 {
-    private readonly List<AvailabilityRule> _availabilityRules = [];
+    private readonly List<AvailabilitySchedule> _availabilitySchedules = [];
     private readonly List<AvailabilityException> _availabilityExceptions = [];
 
     private Provider()
@@ -53,7 +53,8 @@ public sealed class Provider : Entity
 
     public DateTimeOffset CreatedAtUtc { get; private set; }
 
-    public IReadOnlyCollection<AvailabilityRule> AvailabilityRules => _availabilityRules;
+    public IReadOnlyCollection<AvailabilitySchedule> AvailabilitySchedules =>
+        _availabilitySchedules;
 
     public IReadOnlyCollection<AvailabilityException> AvailabilityExceptions =>
         _availabilityExceptions;
@@ -100,37 +101,28 @@ public sealed class Provider : Entity
 
     public void Deactivate() => IsActive = false;
 
-    public void ReplaceAvailabilityRules(IEnumerable<AvailabilityRule> rules)
+    public void AddAvailabilitySchedule(AvailabilitySchedule schedule)
     {
-        ArgumentNullException.ThrowIfNull(rules);
-        var replacements = rules.ToList();
+        ArgumentNullException.ThrowIfNull(schedule);
 
-        if (replacements.Any(rule => rule.ProviderId != Id))
+        if (schedule.ProviderId != Id)
         {
             throw new ArgumentException(
-                "Every availability rule must belong to this provider.",
-                nameof(rules));
+                "The availability schedule must belong to this provider.",
+                nameof(schedule));
         }
 
-        var overlaps = replacements
-            .GroupBy(rule => rule.DayOfWeek)
-            .Any(group =>
-            {
-                var ordered = group.OrderBy(rule => rule.StartTime).ToArray();
-                return ordered
-                    .Zip(ordered.Skip(1))
-                    .Any(pair => pair.First.EndTime > pair.Second.StartTime);
-            });
-
-        if (overlaps)
+        if (_availabilitySchedules.Any(existing =>
+            existing.Overlaps(
+                schedule.DayOfWeek,
+                schedule.StartTime,
+                schedule.EndTime)))
         {
-            throw new ArgumentException(
-                "Availability rules for the same provider and day must not overlap.",
-                nameof(rules));
+            throw new InvalidOperationException(
+                "Availability schedules for the same provider and day must not overlap.");
         }
 
-        _availabilityRules.Clear();
-        _availabilityRules.AddRange(replacements);
+        _availabilitySchedules.Add(schedule);
     }
 
     public void AddAvailabilityException(AvailabilityException exception)

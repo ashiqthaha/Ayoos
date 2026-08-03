@@ -13,6 +13,7 @@ internal sealed class AvailabilityExceptionConfiguration
         builder.HasKey(exception => exception.Id);
 
         builder.Property(exception => exception.ProviderId).IsRequired();
+        builder.Property(exception => exception.TenantId).IsRequired();
         builder.Property(exception => exception.Date)
             .HasColumnType("date")
             .IsRequired();
@@ -23,7 +24,8 @@ internal sealed class AvailabilityExceptionConfiguration
             .HasColumnType("time without time zone");
         builder.Property(exception => exception.Reason).HasMaxLength(500);
 
-        builder.HasIndex(exception => new { exception.ProviderId, exception.Date })
+        builder.HasIndex(exception => new
+            { exception.TenantId, exception.ProviderId, exception.Date })
             .IsUnique();
     }
 }

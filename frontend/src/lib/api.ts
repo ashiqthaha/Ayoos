@@ -124,18 +124,18 @@ export type PagedList<T> = {
 
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
-export type AvailabilityRuleInput = {
+export type AvailabilityScheduleInput = {
   dayOfWeek: DayOfWeek;
   startTime: string;
   endTime: string;
   slotDurationMinutes: number;
-  effectiveFrom: string;
-  effectiveTo: string | null;
 };
 
-export type AvailabilityRule = AvailabilityRuleInput & {
+export type AvailabilitySchedule = AvailabilityScheduleInput & {
   id: string;
   providerId: string;
+  tenantId: string;
+  isActive: boolean;
 };
 
 export type AvailabilityExceptionInput = {
@@ -156,6 +156,31 @@ export type AvailabilitySlot = {
   startTime: string;
   endTime: string;
   durationMinutes: number;
+  availabilityScheduleId: string | null;
+};
+
+export type BookingStatus = 0 | 1 | 2 | 3 | 4;
+
+export type BookingInput = {
+  patientId: string;
+  providerId: string;
+  availabilityScheduleId: string | null;
+  startTime: string;
+  endTime: string;
+  reason: string | null;
+};
+
+export type Booking = BookingInput & {
+  id: string;
+  tenantId: string;
+  status: BookingStatus;
+  createdAt: string;
+};
+
+export type ProviderAvailability = {
+  providerId: string;
+  schedules: AvailabilitySchedule[];
+  exceptions: AvailabilityException[];
 };
 
 export type ProblemDetails = {
@@ -410,13 +435,13 @@ export function deactivatePatient(
   );
 }
 
-export function getAvailabilityRules(
+export function getProviderAvailability(
   slug: string,
   providerId: string,
   signal?: AbortSignal,
-): Promise<AvailabilityRule[]> {
-  return request<AvailabilityRule[]>(
-    `/api/providers/${encodeURIComponent(providerId)}/availability-rules`,
+): Promise<ProviderAvailability> {
+  return request<ProviderAvailability>(
+    `/api/providers/${encodeURIComponent(providerId)}/availability`,
     {
       headers: tenantHeaders(slug),
       signal,
@@ -424,31 +449,47 @@ export function getAvailabilityRules(
   );
 }
 
-export function setAvailabilityRules(
+export function createAvailability(
   slug: string,
   providerId: string,
-  rules: AvailabilityRuleInput[],
-): Promise<AvailabilityRule[]> {
-  return request<AvailabilityRule[]>(
-    `/api/providers/${encodeURIComponent(providerId)}/availability-rules`,
+  input: AvailabilityScheduleInput,
+): Promise<AvailabilitySchedule> {
+  return request<AvailabilitySchedule>(
+    `/api/providers/${encodeURIComponent(providerId)}/availability`,
+    {
+      method: "POST",
+      headers: tenantHeaders(slug),
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function updateAvailability(
+  slug: string,
+  providerId: string,
+  availabilityId: string,
+  input: AvailabilityScheduleInput,
+): Promise<AvailabilitySchedule> {
+  return request<AvailabilitySchedule>(
+    `/api/providers/${encodeURIComponent(providerId)}/availability/${encodeURIComponent(availabilityId)}`,
     {
       method: "PUT",
       headers: tenantHeaders(slug),
-      body: JSON.stringify({ rules }),
+      body: JSON.stringify(input),
     },
   );
 }
 
-export function getAvailabilityExceptions(
+export function deactivateAvailability(
   slug: string,
   providerId: string,
-  signal?: AbortSignal,
-): Promise<AvailabilityException[]> {
-  return request<AvailabilityException[]>(
-    `/api/providers/${encodeURIComponent(providerId)}/availability-exceptions`,
+  availabilityId: string,
+): Promise<void> {
+  return request<void>(
+    `/api/providers/${encodeURIComponent(providerId)}/availability/${encodeURIComponent(availabilityId)}`,
     {
+      method: "DELETE",
       headers: tenantHeaders(slug),
-      signal,
     },
   );
 }
@@ -459,7 +500,7 @@ export function addAvailabilityException(
   input: AvailabilityExceptionInput,
 ): Promise<AvailabilityException> {
   return request<AvailabilityException>(
-    `/api/providers/${encodeURIComponent(providerId)}/availability-exceptions`,
+    `/api/providers/${encodeURIComponent(providerId)}/availability/exceptions`,
     {
       method: "POST",
       headers: tenantHeaders(slug),
@@ -473,9 +514,8 @@ export function removeAvailabilityException(
   providerId: string,
   exceptionId: string,
 ): Promise<void> {
-  const query = new URLSearchParams({ exceptionId });
   return request<void>(
-    `/api/providers/${encodeURIComponent(providerId)}/availability-exceptions?${query}`,
+    `/api/providers/${encodeURIComponent(providerId)}/availability/exceptions/${encodeURIComponent(exceptionId)}`,
     {
       method: "DELETE",
       headers: tenantHeaders(slug),
@@ -492,10 +532,109 @@ export function getProviderSlots(
 ): Promise<AvailabilitySlot[]> {
   const query = new URLSearchParams({ from: fromDate, to: toDate });
   return request<AvailabilitySlot[]>(
-    `/api/providers/${encodeURIComponent(providerId)}/slots?${query}`,
+    `/api/providers/${encodeURIComponent(providerId)}/availability/slots?${query}`,
     {
       headers: tenantHeaders(slug),
       signal,
     },
   );
+}
+
+export function createBooking(
+  slug: string,
+  input: BookingInput,
+): Promise<Booking> {
+  return request<Booking>("/api/bookings", {
+    method: "POST",
+    headers: tenantHeaders(slug),
+    body: JSON.stringify(input),
+  });
+}
+
+export function getBooking(
+  slug: string,
+  bookingId: string,
+  signal?: AbortSignal,
+): Promise<Booking> {
+  return request<Booking>(`/api/bookings/${encodeURIComponent(bookingId)}`, {
+    headers: tenantHeaders(slug),
+    signal,
+  });
+}
+
+export function listBookings(
+  slug: string,
+  options: {
+    providerId?: string;
+    patientId?: string;
+    fromDate?: string;
+    toDate?: string;
+    status?: BookingStatus;
+    page?: number;
+    pageSize?: number;
+    signal?: AbortSignal;
+  } = {},
+): Promise<PagedList<Booking>> {
+  const query = new URLSearchParams({
+    page: String(options.page ?? 1),
+    pageSize: String(options.pageSize ?? 20),
+  });
+  if (options.providerId) query.set("providerId", options.providerId);
+  if (options.patientId) query.set("patientId", options.patientId);
+  if (options.fromDate) query.set("fromDate", options.fromDate);
+  if (options.toDate) query.set("toDate", options.toDate);
+  if (options.status !== undefined) query.set("status", String(options.status));
+
+  return request<PagedList<Booking>>(`/api/bookings?${query}`, {
+    headers: tenantHeaders(slug),
+    signal: options.signal,
+  });
+}
+
+export function getProviderBookingSchedule(
+  slug: string,
+  providerId: string,
+  fromDate: string,
+  toDate: string,
+  signal?: AbortSignal,
+): Promise<Booking[]> {
+  const query = new URLSearchParams({
+    providerId,
+    from: fromDate,
+    to: toDate,
+  });
+  return request<Booking[]>(`/api/bookings/provider-schedule?${query}`, {
+    headers: tenantHeaders(slug),
+    signal,
+  });
+}
+
+function transitionBooking(
+  slug: string,
+  bookingId: string,
+  transition: "confirm" | "cancel" | "complete" | "no-show",
+): Promise<Booking> {
+  return request<Booking>(
+    `/api/bookings/${encodeURIComponent(bookingId)}/${transition}`,
+    {
+      method: "POST",
+      headers: tenantHeaders(slug),
+    },
+  );
+}
+
+export function confirmBooking(slug: string, bookingId: string): Promise<Booking> {
+  return transitionBooking(slug, bookingId, "confirm");
+}
+
+export function cancelBooking(slug: string, bookingId: string): Promise<Booking> {
+  return transitionBooking(slug, bookingId, "cancel");
+}
+
+export function completeBooking(slug: string, bookingId: string): Promise<Booking> {
+  return transitionBooking(slug, bookingId, "complete");
+}
+
+export function markBookingNoShow(slug: string, bookingId: string): Promise<Booking> {
+  return transitionBooking(slug, bookingId, "no-show");
 }

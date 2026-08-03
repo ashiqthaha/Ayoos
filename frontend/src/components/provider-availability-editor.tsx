@@ -4,14 +4,15 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import {
   addAvailabilityException,
-  getAvailabilityExceptions,
-  getAvailabilityRules,
+  createAvailability,
+  deactivateAvailability,
+  getProviderAvailability,
   getProviderSlots,
   removeAvailabilityException,
-  setAvailabilityRules,
+  updateAvailability,
   type AvailabilityException,
-  type AvailabilityRule,
-  type AvailabilityRuleInput,
+  type AvailabilitySchedule,
+  type AvailabilityScheduleInput,
   type AvailabilitySlot,
   type DayOfWeek,
 } from "@/lib/api";
@@ -36,8 +37,6 @@ type ScheduleRow = {
   startTime: string;
   endTime: string;
   slotDurationMinutes: number;
-  effectiveFrom: string;
-  effectiveTo: string | null;
 };
 
 const days: Array<{ value: DayOfWeek; label: string }> = [
@@ -50,20 +49,16 @@ const days: Array<{ value: DayOfWeek; label: string }> = [
   { value: 0, label: "Sunday" },
 ];
 
-function scheduleFromRules(rules: AvailabilityRule[]): ScheduleRow[] {
-  const today = todayIsoDate();
-
+function scheduleFromSchedules(schedules: AvailabilitySchedule[]): ScheduleRow[] {
   return days.map((day) => {
-    const rule = rules.find((item) => item.dayOfWeek === day.value);
+    const schedule = schedules.find((item) => item.dayOfWeek === day.value);
     return {
       dayOfWeek: day.value,
       label: day.label,
-      enabled: Boolean(rule),
-      startTime: rule ? shortTime(rule.startTime) : "09:00",
-      endTime: rule ? shortTime(rule.endTime) : "17:00",
-      slotDurationMinutes: rule?.slotDurationMinutes ?? 30,
-      effectiveFrom: rule?.effectiveFrom ?? today,
-      effectiveTo: rule?.effectiveTo ?? null,
+      enabled: Boolean(schedule),
+      startTime: schedule ? shortTime(schedule.startTime) : "09:00",
+      endTime: schedule ? shortTime(schedule.endTime) : "17:00",
+      slotDurationMinutes: schedule?.slotDurationMinutes ?? 30,
     };
   });
 }
@@ -82,8 +77,9 @@ export function ProviderAvailabilityEditor({
   isActive,
 }: Props) {
   const [schedule, setSchedule] = useState<ScheduleRow[]>(() =>
-    scheduleFromRules([]),
+    scheduleFromSchedules([]),
   );
+  const [savedSchedules, setSavedSchedules] = useState<AvailabilitySchedule[]>([]);
   const [exceptions, setExceptions] = useState<AvailabilityException[]>([]);
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -129,9 +125,8 @@ export function ProviderAvailabilityEditor({
       setMessage(null);
 
       try {
-        const [loadedRules, loadedExceptions, loadedSlots] = await Promise.all([
-          getAvailabilityRules(slug, providerId, controller.signal),
-          getAvailabilityExceptions(slug, providerId, controller.signal),
+        const [availability, loadedSlots] = await Promise.all([
+          getProviderAvailability(slug, providerId, controller.signal),
           getProviderSlots(
             slug,
             providerId,
@@ -141,8 +136,9 @@ export function ProviderAvailabilityEditor({
           ),
         ]);
 
-        setSchedule(scheduleFromRules(loadedRules));
-        setExceptions(loadedExceptions);
+        setSavedSchedules(availability.schedules);
+        setSchedule(scheduleFromSchedules(availability.schedules));
+        setExceptions(availability.exceptions);
         setSlots(loadedSlots);
       } catch (error) {
         if (!controller.signal.aborted) {
@@ -195,23 +191,40 @@ export function ProviderAvailabilityEditor({
       return;
     }
 
-    const rules: AvailabilityRuleInput[] = schedule
-      .filter((row) => row.enabled)
-      .map((row) => ({
-        dayOfWeek: row.dayOfWeek,
-        startTime: apiTime(row.startTime),
-        endTime: apiTime(row.endTime),
-        slotDurationMinutes: row.slotDurationMinutes,
-        effectiveFrom: row.effectiveFrom,
-        effectiveTo: row.effectiveTo,
-      }));
-
     setIsSavingRules(true);
     setMessage(null);
 
     try {
-      const saved = await setAvailabilityRules(slug, providerId, rules);
-      setSchedule(scheduleFromRules(saved));
+      for (const row of schedule) {
+        const existing = savedSchedules.find(
+          (item) => item.dayOfWeek === row.dayOfWeek,
+        );
+
+        if (!row.enabled && existing) {
+          await deactivateAvailability(slug, providerId, existing.id);
+          continue;
+        }
+
+        if (!row.enabled) continue;
+
+        const input: AvailabilityScheduleInput = {
+          dayOfWeek: row.dayOfWeek,
+          startTime: apiTime(row.startTime),
+          endTime: apiTime(row.endTime),
+          slotDurationMinutes: row.slotDurationMinutes,
+        };
+
+        if (existing) {
+          await updateAvailability(slug, providerId, existing.id, input);
+        } else {
+          await createAvailability(slug, providerId, input);
+        }
+      }
+
+      const availability = await getProviderAvailability(slug, providerId);
+      setSavedSchedules(availability.schedules);
+      setSchedule(scheduleFromSchedules(availability.schedules));
+      setExceptions(availability.exceptions);
       setMessage({ tone: "success", text: "Weekly availability saved." });
       await loadSlots();
     } catch (error) {
