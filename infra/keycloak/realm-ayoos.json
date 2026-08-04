@@ -101,6 +101,15 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false
+    },
+    {
+      "clientId": "ayoos-admin-api",
+      "enabled": true,
+      "publicClient": false,
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "secret": "ayoos-admin-dev-secret"
     }
   ],
   "users": [
@@ -126,6 +135,18 @@
       "realmRoles": [
         "practice-admin"
       ]
+    },
+    {
+      "username": "service-account-ayoos-admin-api",
+      "enabled": true,
+      "serviceAccountClientId": "ayoos-admin-api",
+      "clientRoles": {
+        "realm-management": [
+          "manage-users",
+          "view-users",
+          "query-users"
+        ]
+      }
     }
   ]
 }

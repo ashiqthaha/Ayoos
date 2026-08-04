@@ -3,6 +3,7 @@
   <ItemGroup>
     <PackageReference Include="Finbuckle.MultiTenant.AspNetCore" Version="10.1.1" />
     <PackageReference Include="Finbuckle.MultiTenant.EntityFrameworkCore" Version="10.1.1" />
+    <PackageReference Include="Keycloak.AuthServices.Sdk" Version="3.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.3">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
