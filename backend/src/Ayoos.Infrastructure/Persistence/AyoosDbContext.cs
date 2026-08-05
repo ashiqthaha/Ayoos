@@ -1,6 +1,7 @@
 using Ayoos.Domain.Bookings;
 using Ayoos.Domain.Practices;
 using Ayoos.Domain.Patients;
+using Ayoos.Domain.PracticeInvitations;
 using Ayoos.Domain.Providers;
 using Finbuckle.MultiTenant.Abstractions;
 using Finbuckle.MultiTenant.EntityFrameworkCore;
@@ -15,6 +16,9 @@ public sealed class AyoosDbContext(
     : MultiTenantDbContext(multiTenantContextAccessor, options)
 {
     public DbSet<Practice> Practices => Set<Practice>();
+
+    public DbSet<PracticeInvitation> PracticeInvitations =>
+        Set<PracticeInvitation>();
 
     public DbSet<Provider> Providers => Set<Provider>();
 
@@ -34,6 +38,7 @@ public sealed class AyoosDbContext(
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AyoosDbContext).Assembly);
+        // PracticeInvitation is intentionally global. Do not call IsMultiTenant() for it.
         modelBuilder.Entity<Practice>().IsMultiTenant();
         modelBuilder.Entity<Provider>().IsMultiTenant();
         modelBuilder.Entity<Patient>().IsMultiTenant();

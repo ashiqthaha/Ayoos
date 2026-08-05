@@ -31,10 +31,11 @@ namespace Ayoos.Infrastructure.Persistence.Migrations.Ayoos
                     b.Property<Guid?>("AvailabilityScheduleId")
                         .HasColumnType("uuid");
 
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<string>("CancellationReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
-                    b.Property<DateTimeOffset>("EndTime")
+                    b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("PatientId")
@@ -47,17 +48,29 @@ namespace Ayoos.Infrastructure.Persistence.Migrations.Ayoos
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
-                    b.Property<DateTimeOffset>("StartTime")
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<DateTimeOffset>("ScheduledEnd")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ScheduledStart")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
@@ -67,13 +80,17 @@ namespace Ayoos.Infrastructure.Persistence.Migrations.Ayoos
 
                     b.HasIndex("ProviderId");
 
-                    b.HasIndex("TenantId", "PatientId", "StartTime");
+                    b.HasIndex("TenantId", "PatientId", "ScheduledStart");
 
-                    b.HasIndex("TenantId", "ProviderId", "StartTime", "EndTime", "Status");
+                    b.HasIndex("TenantId", "ProviderId", "ScheduledStart")
+                        .IsUnique()
+                        .HasFilter("\"Status\" IN ('Pending', 'Confirmed')");
+
+                    b.HasIndex("TenantId", "ProviderId", "ScheduledStart", "ScheduledEnd", "Status");
 
                     b.ToTable("Bookings", null, t =>
                         {
-                            t.HasCheckConstraint("CK_Bookings_StartBeforeEnd", "\"StartTime\" < \"EndTime\"");
+                            t.HasCheckConstraint("CK_Bookings_ScheduledStartBeforeEnd", "\"ScheduledStart\" < \"ScheduledEnd\"");
                         });
 
                     b.HasAnnotation("Finbuckle:MultiTenant", true);
@@ -190,6 +207,59 @@ namespace Ayoos.Infrastructure.Persistence.Migrations.Ayoos
                     b.HasAnnotation("Finbuckle:MultiTenant", true);
                 });
 
+            modelBuilder.Entity("Ayoos.Domain.PracticeInvitations.PracticeInvitation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ConsumedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByKeycloakUserId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PracticeAdminKeycloakUserId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("PracticeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.ToTable("PracticeInvitations", (string)null);
+                });
+
             modelBuilder.Entity("Ayoos.Domain.Practices.Practice", b =>
                 {
                     b.Property<Guid>("Id")
@@ -247,17 +317,17 @@ namespace Ayoos.Infrastructure.Persistence.Migrations.Ayoos
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateOnly>("Date")
                         .HasColumnType("date");
 
-                    b.Property<bool>("IsUnavailable")
-                        .HasColumnType("boolean");
-
-                    b.Property<TimeOnly?>("OverrideEndTime")
+                    b.Property<TimeOnly?>("EndTime")
                         .HasColumnType("time without time zone");
 
-                    b.Property<TimeOnly?>("OverrideStartTime")
-                        .HasColumnType("time without time zone");
+                    b.Property<int>("ExceptionType")
+                        .HasColumnType("integer");
 
                     b.Property<Guid>("ProviderId")
                         .HasColumnType("uuid");
@@ -266,9 +336,15 @@ namespace Ayoos.Infrastructure.Persistence.Migrations.Ayoos
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<TimeOnly?>("StartTime")
+                        .HasColumnType("time without time zone");
+
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
@@ -287,6 +363,9 @@ namespace Ayoos.Infrastructure.Persistence.Migrations.Ayoos
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("DayOfWeek")
                         .HasColumnType("integer");
@@ -311,6 +390,9 @@ namespace Ayoos.Infrastructure.Persistence.Migrations.Ayoos
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 

@@ -17,7 +17,7 @@ function callbackReturnUrl(state: unknown): string {
     return state.returnUrl;
   }
 
-  return "/setup/practice";
+  return "/";
 }
 
 export default function AuthenticationCallbackPage() {

@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Ayoos.Application\Ayoos.Application.csproj" />
+    <ProjectReference Include="..\..\src\Ayoos.Api\Ayoos.Api.csproj" />
     <ProjectReference Include="..\..\src\Ayoos.Domain\Ayoos.Domain.csproj" />
     <ProjectReference Include="..\..\src\Ayoos.Infrastructure\Ayoos.Infrastructure.csproj" />
   </ItemGroup>

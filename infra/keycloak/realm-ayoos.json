@@ -8,6 +8,10 @@
   "roles": {
     "realm": [
       {
+        "name": "ayoos-superadmin",
+        "description": "Onboards practices and manages practice invitations."
+      },
+      {
         "name": "practice-admin",
         "description": "Administers a practice and its staff."
       },
@@ -133,7 +137,7 @@
         }
       ],
       "realmRoles": [
-        "practice-admin"
+        "ayoos-superadmin"
       ]
     },
     {
@@ -144,7 +148,8 @@
         "realm-management": [
           "manage-users",
           "view-users",
-          "query-users"
+          "query-users",
+          "view-realm"
         ]
       }
     }

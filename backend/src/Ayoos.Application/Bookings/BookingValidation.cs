@@ -3,9 +3,10 @@ using System.Linq.Expressions;
 
 namespace Ayoos.Application.Bookings;
 
-internal static class BookingValidation
+public static class BookingValidation
 {
     public const int MaximumReasonLength = 1000;
+    public const int MaximumCancellationReasonLength = 500;
 
     public static void AddBookingIdRule<T>(
         AbstractValidator<T> validator,

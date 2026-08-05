@@ -1,6 +1,7 @@
 using Ayoos.Application.Common.Exceptions;
 using Ayoos.Application.Common.Interfaces;
 using Ayoos.Domain.Bookings;
+using Ayoos.Domain.Common;
 
 namespace Ayoos.Application.Bookings;
 
@@ -22,7 +23,7 @@ internal static class BookingStatusTransition
         {
             transition(booking);
         }
-        catch (InvalidOperationException exception)
+        catch (DomainException exception)
         {
             throw new ConflictException(exception.Message);
         }

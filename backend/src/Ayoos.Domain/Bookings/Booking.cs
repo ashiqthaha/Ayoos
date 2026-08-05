@@ -15,8 +15,8 @@ public sealed class Booking : Entity
         Guid patientId,
         Guid providerId,
         Guid? availabilityScheduleId,
-        DateTimeOffset startTime,
-        DateTimeOffset endTime,
+        DateTimeOffset scheduledStart,
+        DateTimeOffset scheduledEnd,
         string? reason,
         DateTimeOffset createdAt)
         : base(id)
@@ -25,11 +25,12 @@ public sealed class Booking : Entity
         PatientId = patientId;
         ProviderId = providerId;
         AvailabilityScheduleId = availabilityScheduleId;
-        StartTime = startTime;
-        EndTime = endTime;
-        Status = BookingStatus.Requested;
+        ScheduledStart = scheduledStart;
+        ScheduledEnd = scheduledEnd;
+        Status = BookingStatus.Pending;
         Reason = reason;
         CreatedAt = createdAt;
+        UpdatedAt = createdAt;
     }
 
     public string TenantId { get; private set; } = string.Empty;
@@ -40,9 +41,9 @@ public sealed class Booking : Entity
 
     public Guid? AvailabilityScheduleId { get; private set; }
 
-    public DateTimeOffset StartTime { get; private set; }
+    public DateTimeOffset ScheduledStart { get; private set; }
 
-    public DateTimeOffset EndTime { get; private set; }
+    public DateTimeOffset ScheduledEnd { get; private set; }
 
     public BookingStatus Status { get; private set; }
 
@@ -50,13 +51,21 @@ public sealed class Booking : Entity
 
     public DateTimeOffset CreatedAt { get; private set; }
 
+    public DateTimeOffset UpdatedAt { get; private set; }
+
+    public string? CancellationReason { get; private set; }
+
+    public uint RowVersion { get; private set; }
+
+    public bool IsActive => Status is BookingStatus.Pending or BookingStatus.Confirmed;
+
     public static Booking Create(
         string tenantId,
         Guid patientId,
         Guid providerId,
         Guid? availabilityScheduleId,
-        DateTimeOffset startTime,
-        DateTimeOffset endTime,
+        DateTimeOffset scheduledStart,
+        DateTimeOffset scheduledEnd,
         string? reason,
         DateTimeOffset createdAt)
     {
@@ -68,11 +77,9 @@ public sealed class Booking : Entity
             throw new ArgumentOutOfRangeException(nameof(availabilityScheduleId));
         }
 
-        if (startTime >= endTime)
+        if (scheduledStart >= scheduledEnd)
         {
-            throw new ArgumentException(
-                "StartTime must be before EndTime.",
-                nameof(startTime));
+            throw new DomainException("ScheduledStart must be before ScheduledEnd.");
         }
 
         return new Booking(
@@ -81,35 +88,60 @@ public sealed class Booking : Entity
             patientId,
             providerId,
             availabilityScheduleId,
-            startTime.ToUniversalTime(),
-            endTime.ToUniversalTime(),
+            scheduledStart.ToUniversalTime(),
+            scheduledEnd.ToUniversalTime(),
             Optional(reason),
             createdAt.ToUniversalTime());
     }
 
-    public void Confirm() => TransitionFrom(
-        BookingStatus.Requested,
-        BookingStatus.Confirmed);
+    public void Confirm(DateTimeOffset? changedAt = null) => TransitionFrom(
+        BookingStatus.Pending,
+        BookingStatus.Confirmed,
+        changedAt);
 
-    public void Cancel()
+    public void CancelByPatient(
+        string? cancellationReason = null,
+        DateTimeOffset? changedAt = null) => Cancel(
+        BookingStatus.CancelledByPatient,
+        cancellationReason,
+        changedAt);
+
+    public void CancelByProvider(
+        string? cancellationReason = null,
+        DateTimeOffset? changedAt = null) => Cancel(
+        BookingStatus.CancelledByProvider,
+        cancellationReason,
+        changedAt);
+
+    public void Complete(DateTimeOffset? changedAt = null) => TransitionFrom(
+        BookingStatus.Confirmed,
+        BookingStatus.Completed,
+        changedAt);
+
+    public void MarkNoShow(DateTimeOffset? changedAt = null) => TransitionFrom(
+        BookingStatus.Confirmed,
+        BookingStatus.NoShow,
+        changedAt);
+
+    private void Cancel(
+        BookingStatus target,
+        string? cancellationReason,
+        DateTimeOffset? changedAt)
     {
-        if (Status is not BookingStatus.Requested and not BookingStatus.Confirmed)
+        if (!IsActive)
         {
-            throw InvalidTransition(BookingStatus.Cancelled);
+            throw InvalidTransition(target);
         }
 
-        Status = BookingStatus.Cancelled;
+        Status = target;
+        CancellationReason = Optional(cancellationReason);
+        Touch(changedAt);
     }
 
-    public void Complete() => TransitionFrom(
-        BookingStatus.Confirmed,
-        BookingStatus.Completed);
-
-    public void MarkNoShow() => TransitionFrom(
-        BookingStatus.Confirmed,
-        BookingStatus.NoShow);
-
-    private void TransitionFrom(BookingStatus expected, BookingStatus target)
+    private void TransitionFrom(
+        BookingStatus expected,
+        BookingStatus target,
+        DateTimeOffset? changedAt)
     {
         if (Status != expected)
         {
@@ -117,9 +149,13 @@ public sealed class Booking : Entity
         }
 
         Status = target;
+        Touch(changedAt);
     }
 
-    private InvalidOperationException InvalidTransition(BookingStatus target) =>
+    private void Touch(DateTimeOffset? changedAt) =>
+        UpdatedAt = (changedAt ?? DateTimeOffset.UtcNow).ToUniversalTime();
+
+    private DomainException InvalidTransition(BookingStatus target) =>
         new($"A booking in status '{Status}' cannot transition to '{target}'.");
 
     private static string? Optional(string? value) =>

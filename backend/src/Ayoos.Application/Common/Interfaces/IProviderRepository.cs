@@ -21,12 +21,20 @@ public interface IProviderRepository
         Guid availabilityId,
         CancellationToken cancellationToken = default);
 
-    Task<bool> HasAvailabilityOverlapAsync(
+    Task<IReadOnlyList<AvailabilitySchedule>> ListActiveAvailabilitySchedulesAsync(
         Guid providerId,
         DayOfWeek dayOfWeek,
-        TimeOnly startTime,
-        TimeOnly endTime,
-        Guid? excludeAvailabilityId = null,
+        CancellationToken cancellationToken = default);
+
+    Task<AvailabilityException?> GetAvailabilityExceptionAsync(
+        Guid providerId,
+        Guid exceptionId,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<AvailabilityException>> ListAvailabilityExceptionsAsync(
+        Guid providerId,
+        DateOnly fromDate,
+        DateOnly toDate,
         CancellationToken cancellationToken = default);
 
     Task AddAvailabilityScheduleAsync(

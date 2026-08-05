@@ -47,7 +47,7 @@ public sealed class AvailabilitySlotGeneratorTests
             ProviderId,
             TenantId,
             Monday,
-            true,
+            AvailabilityExceptionType.Unavailable,
             null,
             null,
             "Vacation");
@@ -71,7 +71,7 @@ public sealed class AvailabilitySlotGeneratorTests
             ProviderId,
             TenantId,
             Monday,
-            false,
+            AvailabilityExceptionType.CustomHours,
             new TimeOnly(12, 0),
             new TimeOnly(13, 0),
             "Lunch clinic only");

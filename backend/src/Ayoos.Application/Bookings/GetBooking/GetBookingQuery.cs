@@ -3,13 +3,13 @@ using MediatR;
 
 namespace Ayoos.Application.Bookings.GetBooking;
 
-public sealed record GetBookingQuery(Guid BookingId) : IRequest<BookingModel?>;
+public sealed record GetBookingByIdQuery(Guid BookingId) : IRequest<BookingModel?>;
 
-internal sealed class GetBookingQueryHandler(IBookingRepository repository)
-    : IRequestHandler<GetBookingQuery, BookingModel?>
+internal sealed class GetBookingByIdQueryHandler(IBookingRepository repository)
+    : IRequestHandler<GetBookingByIdQuery, BookingModel?>
 {
     public async Task<BookingModel?> Handle(
-        GetBookingQuery request,
+        GetBookingByIdQuery request,
         CancellationToken cancellationToken)
     {
         var booking = await repository.GetByIdAsync(

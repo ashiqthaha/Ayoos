@@ -34,6 +34,30 @@ export type Practice = Omit<PracticeInput, "address"> & {
   isActive: boolean;
 };
 
+export type PracticeInvitationStatus =
+  | "Pending"
+  | "Consumed"
+  | "Expired"
+  | "Revoked";
+
+export type PracticeInvitationSummary = {
+  id: string;
+  email: string;
+  status: PracticeInvitationStatus;
+  expiresAt: string;
+  createdAt: string;
+};
+
+export type CreatePracticeInvitationResult = {
+  invitationId: string;
+  setupUrl: string;
+};
+
+export type PracticeInvitationSetup = {
+  email: string;
+  status: PracticeInvitationStatus;
+};
+
 export type ProviderInput = {
   firstName: string;
   lastName: string;
@@ -129,26 +153,37 @@ export type AvailabilityScheduleInput = {
   startTime: string;
   endTime: string;
   slotDurationMinutes: number;
+  confirmOverlap?: boolean;
 };
 
-export type AvailabilitySchedule = AvailabilityScheduleInput & {
+export type AvailabilitySchedule = {
   id: string;
   providerId: string;
   tenantId: string;
+  dayOfWeek: DayOfWeek;
+  startTime: string;
+  endTime: string;
+  slotDurationMinutes: number;
   isActive: boolean;
+  createdAtUtc: string;
+  updatedAtUtc: string | null;
 };
+
+export type AvailabilityExceptionType = 0 | 1;
 
 export type AvailabilityExceptionInput = {
   date: string;
-  isUnavailable: boolean;
-  overrideStartTime: string | null;
-  overrideEndTime: string | null;
+  exceptionType: AvailabilityExceptionType;
+  startTime: string | null;
+  endTime: string | null;
   reason: string | null;
 };
 
 export type AvailabilityException = AvailabilityExceptionInput & {
   id: string;
   providerId: string;
+  createdAtUtc: string;
+  updatedAtUtc: string | null;
 };
 
 export type AvailabilitySlot = {
@@ -159,28 +194,77 @@ export type AvailabilitySlot = {
   availabilityScheduleId: string | null;
 };
 
-export type BookingStatus = 0 | 1 | 2 | 3 | 4;
+export type BookingStatus = 0 | 1 | 2 | 3 | 4 | 5;
 
 export type BookingInput = {
   patientId: string;
   providerId: string;
   availabilityScheduleId: string | null;
-  startTime: string;
-  endTime: string;
+  scheduledStart: string;
+  scheduledEnd: string;
   reason: string | null;
+  force?: boolean;
 };
 
-export type Booking = BookingInput & {
+export type Booking = Omit<BookingInput, "force"> & {
   id: string;
   tenantId: string;
   status: BookingStatus;
   createdAt: string;
+  updatedAt: string;
+  cancellationReason: string | null;
+  rowVersion: number;
 };
 
-export type ProviderAvailability = {
+export type BookingConflict = Pick<
+  Booking,
+  "id" | "patientId" | "providerId" | "scheduledStart" | "scheduledEnd" | "status"
+>;
+
+export type BookingConflictPreview = {
+  hasConflicts: boolean;
+  conflicts: BookingConflict[];
+};
+
+export type CreateBookingResult = {
+  booking: Booking | null;
+  conflictPreview: BookingConflictPreview;
+};
+
+export type ProviderBookingSchedule = {
   providerId: string;
+  fromDate: string;
+  toDate: string;
+  bookings: Booking[];
+  openSlots: AvailabilitySlot[];
+};
+
+export type ProviderScheduleDay = {
+  dayOfWeek: DayOfWeek;
   schedules: AvailabilitySchedule[];
-  exceptions: AvailabilityException[];
+};
+
+export type ProviderWeeklySchedule = {
+  providerId: string;
+  days: ProviderScheduleDay[];
+};
+
+export type AvailabilityOverlapConflict = {
+  id: string;
+  dayOfWeek: DayOfWeek;
+  startTime: string;
+  endTime: string;
+  slotDurationMinutes: number;
+};
+
+export type ScheduleOverlapPreview = {
+  hasConflicts: boolean;
+  conflicts: AvailabilityOverlapConflict[];
+};
+
+export type AvailabilityScheduleMutationResult = {
+  schedule: AvailabilitySchedule | null;
+  overlapPreview: ScheduleOverlapPreview;
 };
 
 export type ProblemDetails = {
@@ -269,11 +353,57 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
-export function createPractice(input: PracticeInput): Promise<Practice> {
+export function createPractice(
+  input: PracticeInput,
+  rawToken: string,
+): Promise<Practice> {
   return request<Practice>("/api/practices", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, rawToken }),
   });
+}
+
+export function createPracticeInvitation(
+  email: string,
+  expiryDays: number,
+): Promise<CreatePracticeInvitationResult> {
+  return request<CreatePracticeInvitationResult>("/api/admin/invitations", {
+    method: "POST",
+    body: JSON.stringify({ email, expiryDays }),
+  });
+}
+
+export function listPracticeInvitations(
+  page = 1,
+  pageSize = 20,
+  signal?: AbortSignal,
+): Promise<PagedList<PracticeInvitationSummary>> {
+  const query = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+
+  return request<PagedList<PracticeInvitationSummary>>(
+    `/api/admin/invitations?${query}`,
+    { signal },
+  );
+}
+
+export function revokePracticeInvitation(invitationId: string): Promise<void> {
+  return request<void>(
+    `/api/admin/invitations/${encodeURIComponent(invitationId)}/revoke`,
+    { method: "POST" },
+  );
+}
+
+export function getPracticeInvitation(
+  rawToken: string,
+  signal?: AbortSignal,
+): Promise<PracticeInvitationSetup> {
+  return request<PracticeInvitationSetup>(
+    `/api/setup/invitations/${encodeURIComponent(rawToken)}`,
+    { signal },
+  );
 }
 
 export function getPractice(slug: string, signal?: AbortSignal): Promise<Practice> {
@@ -435,12 +565,12 @@ export function deactivatePatient(
   );
 }
 
-export function getProviderAvailability(
+export function getProviderWeeklySchedule(
   slug: string,
   providerId: string,
   signal?: AbortSignal,
-): Promise<ProviderAvailability> {
-  return request<ProviderAvailability>(
+): Promise<ProviderWeeklySchedule> {
+  return request<ProviderWeeklySchedule>(
     `/api/providers/${encodeURIComponent(providerId)}/availability`,
     {
       headers: tenantHeaders(slug),
@@ -449,12 +579,12 @@ export function getProviderAvailability(
   );
 }
 
-export function createAvailability(
+export function createAvailabilitySchedule(
   slug: string,
   providerId: string,
   input: AvailabilityScheduleInput,
-): Promise<AvailabilitySchedule> {
-  return request<AvailabilitySchedule>(
+): Promise<AvailabilityScheduleMutationResult> {
+  return request<AvailabilityScheduleMutationResult>(
     `/api/providers/${encodeURIComponent(providerId)}/availability`,
     {
       method: "POST",
@@ -464,13 +594,13 @@ export function createAvailability(
   );
 }
 
-export function updateAvailability(
+export function updateAvailabilitySchedule(
   slug: string,
   providerId: string,
   availabilityId: string,
   input: AvailabilityScheduleInput,
-): Promise<AvailabilitySchedule> {
-  return request<AvailabilitySchedule>(
+): Promise<AvailabilityScheduleMutationResult> {
+  return request<AvailabilityScheduleMutationResult>(
     `/api/providers/${encodeURIComponent(providerId)}/availability/${encodeURIComponent(availabilityId)}`,
     {
       method: "PUT",
@@ -480,7 +610,7 @@ export function updateAvailability(
   );
 }
 
-export function deactivateAvailability(
+export function deleteAvailabilitySchedule(
   slug: string,
   providerId: string,
   availabilityId: string,
@@ -494,7 +624,24 @@ export function deactivateAvailability(
   );
 }
 
-export function addAvailabilityException(
+export function getProviderExceptions(
+  slug: string,
+  providerId: string,
+  fromDate: string,
+  toDate: string,
+  signal?: AbortSignal,
+): Promise<AvailabilityException[]> {
+  const query = new URLSearchParams({ from: fromDate, to: toDate });
+  return request<AvailabilityException[]>(
+    `/api/providers/${encodeURIComponent(providerId)}/availability/exceptions?${query}`,
+    {
+      headers: tenantHeaders(slug),
+      signal,
+    },
+  );
+}
+
+export function createAvailabilityException(
   slug: string,
   providerId: string,
   input: AvailabilityExceptionInput,
@@ -509,7 +656,7 @@ export function addAvailabilityException(
   );
 }
 
-export function removeAvailabilityException(
+export function deleteAvailabilityException(
   slug: string,
   providerId: string,
   exceptionId: string,
@@ -519,6 +666,30 @@ export function removeAvailabilityException(
     {
       method: "DELETE",
       headers: tenantHeaders(slug),
+    },
+  );
+}
+
+export function previewScheduleOverlap(
+  slug: string,
+  providerId: string,
+  input: AvailabilityScheduleInput,
+  excludeScheduleId?: string,
+  signal?: AbortSignal,
+): Promise<ScheduleOverlapPreview> {
+  const query = new URLSearchParams({
+    dayOfWeek: String(input.dayOfWeek),
+    startTime: input.startTime,
+    endTime: input.endTime,
+    slotDurationMinutes: String(input.slotDurationMinutes),
+  });
+  if (excludeScheduleId) query.set("excludeScheduleId", excludeScheduleId);
+
+  return request<ScheduleOverlapPreview>(
+    `/api/providers/${encodeURIComponent(providerId)}/availability/overlap-preview?${query}`,
+    {
+      headers: tenantHeaders(slug),
+      signal,
     },
   );
 }
@@ -543,8 +714,8 @@ export function getProviderSlots(
 export function createBooking(
   slug: string,
   input: BookingInput,
-): Promise<Booking> {
-  return request<Booking>("/api/bookings", {
+): Promise<CreateBookingResult> {
+  return request<CreateBookingResult>("/api/bookings", {
     method: "POST",
     headers: tenantHeaders(slug),
     body: JSON.stringify(input),
@@ -581,8 +752,8 @@ export function listBookings(
   });
   if (options.providerId) query.set("providerId", options.providerId);
   if (options.patientId) query.set("patientId", options.patientId);
-  if (options.fromDate) query.set("fromDate", options.fromDate);
-  if (options.toDate) query.set("toDate", options.toDate);
+  if (options.fromDate) query.set("from", options.fromDate);
+  if (options.toDate) query.set("to", options.toDate);
   if (options.status !== undefined) query.set("status", String(options.status));
 
   return request<PagedList<Booking>>(`/api/bookings?${query}`, {
@@ -597,28 +768,32 @@ export function getProviderBookingSchedule(
   fromDate: string,
   toDate: string,
   signal?: AbortSignal,
-): Promise<Booking[]> {
+): Promise<ProviderBookingSchedule> {
   const query = new URLSearchParams({
-    providerId,
     from: fromDate,
     to: toDate,
   });
-  return request<Booking[]>(`/api/bookings/provider-schedule?${query}`, {
-    headers: tenantHeaders(slug),
-    signal,
-  });
+  return request<ProviderBookingSchedule>(
+    `/api/providers/${encodeURIComponent(providerId)}/schedule?${query}`,
+    {
+      headers: tenantHeaders(slug),
+      signal,
+    },
+  );
 }
 
 function transitionBooking(
   slug: string,
   bookingId: string,
-  transition: "confirm" | "cancel" | "complete" | "no-show",
+  transition: "confirm" | "cancel-patient" | "cancel-provider" | "complete" | "no-show",
+  body?: object,
 ): Promise<Booking> {
   return request<Booking>(
     `/api/bookings/${encodeURIComponent(bookingId)}/${transition}`,
     {
       method: "POST",
       headers: tenantHeaders(slug),
+      ...(body ? { body: JSON.stringify(body) } : {}),
     },
   );
 }
@@ -627,8 +802,30 @@ export function confirmBooking(slug: string, bookingId: string): Promise<Booking
   return transitionBooking(slug, bookingId, "confirm");
 }
 
-export function cancelBooking(slug: string, bookingId: string): Promise<Booking> {
-  return transitionBooking(slug, bookingId, "cancel");
+export function cancelBookingByPatient(
+  slug: string,
+  bookingId: string,
+  cancellationReason: string | null = null,
+): Promise<Booking> {
+  return transitionBooking(
+    slug,
+    bookingId,
+    "cancel-patient",
+    { cancellationReason },
+  );
+}
+
+export function cancelBookingByProvider(
+  slug: string,
+  bookingId: string,
+  cancellationReason: string | null = null,
+): Promise<Booking> {
+  return transitionBooking(
+    slug,
+    bookingId,
+    "cancel-provider",
+    { cancellationReason },
+  );
 }
 
 export function completeBooking(slug: string, bookingId: string): Promise<Booking> {

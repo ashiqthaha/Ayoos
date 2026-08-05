@@ -4,9 +4,10 @@ import Link from "next/link";
 
 import { useAuth } from "@/components/auth-provider";
 import { UserMenu } from "@/components/user-menu";
+import { getRealmRoles } from "@/lib/auth-client";
 
 export function SessionHeaderAction() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
 
   if (isLoading) {
     return (
@@ -15,7 +16,19 @@ export function SessionHeaderAction() {
   }
 
   if (isAuthenticated) {
-    return <UserMenu />;
+    return (
+      <div className="flex items-center gap-3">
+        {user && getRealmRoles(user).includes("ayoos-superadmin") && (
+          <Link
+            href="/admin/invitations"
+            className="rounded-xl border border-[#176b4d]/20 bg-white/70 px-4 py-2.5 text-sm font-semibold text-[#176b4d] transition hover:bg-white"
+          >
+            Invitations
+          </Link>
+        )}
+        <UserMenu />
+      </div>
+    );
   }
 
   return (

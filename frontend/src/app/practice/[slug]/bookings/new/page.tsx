@@ -10,10 +10,11 @@ import { UserMenu } from "@/components/user-menu";
 import {
   createBooking,
   getMyPatientRecord,
-  getProviderSlots,
+  getProviderBookingSchedule,
   listPatients,
   listProviders,
   type AvailabilitySlot,
+  type BookingConflictPreview,
   type Patient,
   type Provider,
 } from "@/lib/api";
@@ -60,10 +61,11 @@ export default function NewBookingPage() {
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conflictPreview, setConflictPreview] = useState<BookingConflictPreview | null>(null);
 
   const role = identity?.role;
   const isPatient = role === "patient";
-  const canCreate = isPatient || role === "staff" || role === "practice-admin";
+  const canCreate = isPatient || role === "practice-admin";
 
   useEffect(() => {
     if (!identity || !canCreate) return;
@@ -106,6 +108,7 @@ export default function NewBookingPage() {
 
   useEffect(() => {
     setSelectedSlot(null);
+    setConflictPreview(null);
     if (!providerId || !date) {
       setSlots([]);
       return;
@@ -116,13 +119,14 @@ export default function NewBookingPage() {
       setIsLoadingSlots(true);
       setError(null);
       try {
-        setSlots(await getProviderSlots(
+        const schedule = await getProviderBookingSchedule(
           slug,
           providerId,
           date,
           date,
           controller.signal,
-        ));
+        );
+        setSlots(schedule.openSlots);
       } catch (loadError) {
         if (!controller.signal.aborted) {
           setSlots([]);
@@ -148,8 +152,7 @@ export default function NewBookingPage() {
     [patientId, patients],
   );
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function save(force = false) {
     if (!selectedSlot || !providerId || !patientId) {
       setError("Choose a patient, provider, date, and available slot first.");
       return;
@@ -158,14 +161,19 @@ export default function NewBookingPage() {
     setIsSaving(true);
     setError(null);
     try {
-      await createBooking(slug, {
+      const result = await createBooking(slug, {
         patientId,
         providerId,
         availabilityScheduleId: selectedSlot.availabilityScheduleId,
-        startTime: slotInstant(selectedSlot.date, selectedSlot.startTime),
-        endTime: slotInstant(selectedSlot.date, selectedSlot.endTime),
+        scheduledStart: slotInstant(selectedSlot.date, selectedSlot.startTime),
+        scheduledEnd: slotInstant(selectedSlot.date, selectedSlot.endTime),
         reason: reason.trim() || null,
+        force,
       });
+      if (!result.booking) {
+        setConflictPreview(result.conflictPreview);
+        return;
+      }
       router.push(`/practice/${encodeURIComponent(slug)}/bookings`);
     } catch (saveError) {
       setError(saveError instanceof Error
@@ -176,11 +184,16 @@ export default function NewBookingPage() {
     }
   }
 
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void save(false);
+  }
+
   if (identity && !canCreate) {
     return (
       <main className="grid min-h-screen place-items-center bg-[#f3f8f7] px-5 text-slate-900">
         <section className="max-w-lg rounded-3xl bg-white p-9 text-center shadow-xl shadow-teal-900/5">
-          <h1 className="text-2xl font-semibold">Booking requests are patient and staff actions</h1>
+          <h1 className="text-2xl font-semibold">Booking requests are patient and administrator actions</h1>
           <p className="mt-3 text-slate-600">Use the schedule view to manage existing provider bookings.</p>
           <Link href={`/practice/${encodeURIComponent(slug)}/bookings`} className="mt-6 inline-flex rounded-xl bg-teal-700 px-5 py-3 text-sm font-semibold text-white">Back to bookings</Link>
         </section>
@@ -241,7 +254,7 @@ export default function NewBookingPage() {
                   <div className="mt-4 flex flex-wrap gap-2">
                     {slots.map((slot) => {
                       const selected = selectedSlot?.startTime === slot.startTime && selectedSlot?.date === slot.date;
-                      return <button key={`${slot.date}-${slot.startTime}`} type="button" onClick={() => setSelectedSlot(slot)} className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${selected ? "border-teal-700 bg-teal-700 text-white" : "border-teal-200 bg-white text-teal-800 hover:bg-teal-50"}`}>{displayTime(slot.startTime)}</button>;
+                      return <button key={`${slot.date}-${slot.startTime}`} type="button" onClick={() => { setSelectedSlot(slot); setConflictPreview(null); }} className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${selected ? "border-teal-700 bg-teal-700 text-white" : "border-teal-200 bg-white text-teal-800 hover:bg-teal-50"}`}>{displayTime(slot.startTime)}</button>;
                     })}
                   </div>
                 )}
@@ -258,6 +271,24 @@ export default function NewBookingPage() {
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-700">Ready to request</p>
                   <p className="mt-2 font-semibold text-slate-950">{selectedPatient.preferredName || selectedPatient.firstName} with {selectedProvider.firstName} {selectedProvider.lastName}</p>
                   <p className="mt-1 text-sm text-slate-600">{date} · {displayTime(selectedSlot.startTime)}–{displayTime(selectedSlot.endTime)}</p>
+                </section>
+              )}
+
+              {conflictPreview?.hasConflicts && (
+                <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5" role="alert">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-800">Scheduling conflict</p>
+                  <h2 className="mt-2 font-semibold text-slate-950">This time overlaps an active booking.</h2>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">Review the conflict, then confirm only if you intend to override the overlap warning.</p>
+                  <ul className="mt-3 grid gap-2 text-sm text-slate-700">
+                    {conflictPreview.conflicts.map((conflict) => (
+                      <li key={conflict.id} className="rounded-xl border border-amber-200 bg-white px-3 py-2">
+                        {new Date(conflict.scheduledStart).toLocaleString()} – {new Date(conflict.scheduledEnd).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                      </li>
+                    ))}
+                  </ul>
+                  <button type="button" disabled={isSaving} onClick={() => void save(true)} className="mt-4 rounded-xl bg-amber-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+                    {isSaving ? "Confirming..." : "Acknowledge and book"}
+                  </button>
                 </section>
               )}
             </div>

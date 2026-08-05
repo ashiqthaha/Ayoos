@@ -1,6 +1,6 @@
 using Ayoos.Application.Common.Exceptions;
 using Ayoos.Application.Common.Interfaces;
-using Ayoos.Application.Providers.GetAvailableSlots;
+using Ayoos.Application.Providers;
 using Ayoos.Domain.Bookings;
 using FluentValidation;
 using MediatR;
@@ -11,25 +11,96 @@ public sealed record CreateBookingCommand(
     Guid PatientId,
     Guid ProviderId,
     Guid? AvailabilityScheduleId,
-    DateTimeOffset StartTime,
-    DateTimeOffset EndTime,
-    string? Reason) : IRequest<BookingModel>;
+    DateTimeOffset ScheduledStart,
+    DateTimeOffset ScheduledEnd,
+    string? Reason,
+    bool Force = false) : IRequest<CreateBookingResult>;
 
 public sealed class CreateBookingCommandValidator
     : AbstractValidator<CreateBookingCommand>
 {
     public CreateBookingCommandValidator()
+        : this(null, null, null, TimeProvider.System)
+    {
+    }
+
+    public CreateBookingCommandValidator(
+        IPatientRepository? patientRepository,
+        IProviderRepository? providerRepository,
+        AvailabilitySlotGenerator? slotGenerator,
+        TimeProvider timeProvider)
     {
         RuleFor(command => command.PatientId).NotEmpty();
         RuleFor(command => command.ProviderId).NotEmpty();
         RuleFor(command => command.AvailabilityScheduleId)
             .NotEqual(Guid.Empty)
             .When(command => command.AvailabilityScheduleId.HasValue);
-        RuleFor(command => command.EndTime)
-            .GreaterThan(command => command.StartTime)
-            .WithMessage("EndTime must be after StartTime.");
+        RuleFor(command => command.ScheduledStart)
+            .Must(value => value.Offset == TimeSpan.Zero)
+            .WithMessage("ScheduledStart must be expressed in UTC.")
+            .GreaterThan(_ => timeProvider.GetUtcNow())
+            .WithMessage("ScheduledStart must be in the future.");
+        RuleFor(command => command.ScheduledEnd)
+            .Must(value => value.Offset == TimeSpan.Zero)
+            .WithMessage("ScheduledEnd must be expressed in UTC.")
+            .GreaterThan(command => command.ScheduledStart)
+            .WithMessage("ScheduledEnd must be after ScheduledStart.");
         RuleFor(command => command.Reason)
             .MaximumLength(BookingValidation.MaximumReasonLength);
+
+        if (patientRepository is null ||
+            providerRepository is null ||
+            slotGenerator is null)
+        {
+            return;
+        }
+
+        RuleFor(command => command).CustomAsync(async (command, context, cancellationToken) =>
+        {
+            if (command.PatientId != Guid.Empty)
+            {
+                var patient = await patientRepository.GetByIdAsync(
+                    command.PatientId,
+                    includeEmergencyContact: false,
+                    cancellationToken);
+                if (patient is null || !patient.IsActive)
+                {
+                    context.AddFailure(
+                        nameof(command.PatientId),
+                        "An active patient with this identifier does not exist.");
+                }
+            }
+
+            if (command.ProviderId == Guid.Empty)
+            {
+                return;
+            }
+
+            var provider = await providerRepository.GetByIdAsync(
+                command.ProviderId,
+                includeAvailability: true,
+                cancellationToken);
+            if (provider is null || !provider.IsActive)
+            {
+                context.AddFailure(
+                    nameof(command.ProviderId),
+                    "An active provider with this identifier does not exist.");
+                return;
+            }
+
+            if (command.ScheduledEnd > command.ScheduledStart &&
+                BookingSlotMatcher.Find(
+                    provider,
+                    command.AvailabilityScheduleId,
+                    command.ScheduledStart,
+                    command.ScheduledEnd,
+                    slotGenerator) is null)
+            {
+                context.AddFailure(
+                    nameof(command.ScheduledStart),
+                    "The requested time does not match a generated, non-excepted provider slot.");
+            }
+        });
     }
 }
 
@@ -37,10 +108,11 @@ internal sealed class CreateBookingCommandHandler(
     IPatientRepository patientRepository,
     IProviderRepository providerRepository,
     IBookingRepository bookingRepository,
-    ISender sender)
-    : IRequestHandler<CreateBookingCommand, BookingModel>
+    AvailabilitySlotGenerator slotGenerator,
+    TimeProvider timeProvider)
+    : IRequestHandler<CreateBookingCommand, CreateBookingResult>
 {
-    public async Task<BookingModel> Handle(
+    public async Task<CreateBookingResult> Handle(
         CreateBookingCommand request,
         CancellationToken cancellationToken)
     {
@@ -56,38 +128,35 @@ internal sealed class CreateBookingCommandHandler(
 
         var provider = await providerRepository.GetByIdAsync(
             request.ProviderId,
-            cancellationToken: cancellationToken);
+            includeAvailability: true,
+            cancellationToken);
         if (provider is null || !provider.IsActive)
         {
             throw new NotFoundException(
                 $"Active provider '{request.ProviderId}' was not found.");
         }
 
-        var startTime = request.StartTime.ToUniversalTime();
-        var endTime = request.EndTime.ToUniversalTime();
-        if (await bookingRepository.HasOverlapAsync(
-            provider.Id,
-            startTime,
-            endTime,
-            cancellationToken: cancellationToken))
-        {
-            throw new ConflictException(
-                "The provider already has a booking that overlaps this time.");
-        }
-
-        var date = DateOnly.FromDateTime(startTime.UtcDateTime);
-        var slots = await sender.Send(
-            new GetAvailableSlotsQuery(provider.Id, date, date),
-            cancellationToken);
-        var matchingSlot = slots.SingleOrDefault(slot =>
-            ToUtc(slot.Date, slot.StartTime) == startTime &&
-            ToUtc(slot.Date, slot.EndTime) == endTime &&
-            (!request.AvailabilityScheduleId.HasValue ||
-                slot.AvailabilityScheduleId == request.AvailabilityScheduleId));
+        var matchingSlot = BookingSlotMatcher.Find(
+            provider,
+            request.AvailabilityScheduleId,
+            request.ScheduledStart,
+            request.ScheduledEnd,
+            slotGenerator);
         if (matchingSlot is null)
         {
             throw new ConflictException(
-                "The requested time does not match an available provider slot.");
+                "The requested time does not match a generated, non-excepted provider slot.");
+        }
+
+        var conflicts = await bookingRepository.FindActiveOverlapsAsync(
+            provider.Id,
+            request.ScheduledStart,
+            request.ScheduledEnd,
+            cancellationToken: cancellationToken);
+        var preview = conflicts.ToConflictPreview();
+        if (preview.HasConflicts && !request.Force)
+        {
+            return new CreateBookingResult(null, preview);
         }
 
         var booking = Booking.Create(
@@ -95,16 +164,13 @@ internal sealed class CreateBookingCommandHandler(
             patient.Id,
             provider.Id,
             matchingSlot.AvailabilityScheduleId,
-            startTime,
-            endTime,
+            request.ScheduledStart,
+            request.ScheduledEnd,
             request.Reason,
-            DateTimeOffset.UtcNow);
+            timeProvider.GetUtcNow());
         await bookingRepository.AddAsync(booking, cancellationToken);
         await bookingRepository.SaveChangesAsync(cancellationToken);
 
-        return booking.ToModel();
+        return new CreateBookingResult(booking.ToModel(), preview);
     }
-
-    private static DateTimeOffset ToUtc(DateOnly date, TimeOnly time) =>
-        new(date.ToDateTime(time), TimeSpan.Zero);
 }

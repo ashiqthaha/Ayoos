@@ -50,6 +50,18 @@ public sealed class CreatePracticeCommandValidatorTests
         Assert.Contains(result.Errors, error => error.PropertyName == nameof(command.ContactEmail));
     }
 
+    [Fact]
+    public async Task Rejects_missing_invitation_token()
+    {
+        var command = ValidCommand() with { RawToken = "" };
+
+        var result = await _validator.ValidateAsync(command);
+
+        Assert.Contains(
+            result.Errors,
+            error => error.PropertyName == nameof(command.RawToken));
+    }
+
     private static CreatePracticeCommand ValidCommand() =>
         new(
             "Downtown Family Clinic",
@@ -63,5 +75,6 @@ public sealed class CreatePracticeCommandValidatorTests
                 "10001",
                 "US"),
             "hello@downtownclinic.example",
-            "+1-212-555-0100");
+            "+1-212-555-0100",
+            "valid-invitation-token");
 }

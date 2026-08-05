@@ -17,12 +17,129 @@ internal sealed class KeycloakUserManagementService(
     IKeycloakClient keycloakClient,
     KeycloakAdminTokenProvider tokenProvider,
     IHttpClientFactory httpClientFactory,
-    IConfiguration configuration) : IUserManagementService
+    IConfiguration configuration) : IUserManagementService, IPracticeInvitationUserService
 {
     private const string PracticeAttribute = "practice";
     private const string RoleAttribute = "role";
     private const string UpdatePasswordAction = "UPDATE_PASSWORD";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    public async Task<string> CreatePracticeAdminAsync(
+        string email,
+        CancellationToken cancellationToken)
+    {
+        const string role = "practice-admin";
+        var (realm, _) = GetKeycloakConfiguration();
+        var temporaryPassword = configuration["Keycloak:InvitationTemporaryPassword"]
+            ?? throw new InvalidOperationException(
+                "Configuration value 'Keycloak:InvitationTemporaryPassword' was not configured.");
+        var user = new UserRepresentation
+        {
+            Username = email,
+            Email = email,
+            Enabled = true,
+            EmailVerified = false,
+            Attributes = new Dictionary<string, ICollection<string>>
+            {
+                [RoleAttribute] = new List<string> { role }
+            },
+            RequiredActions = new List<string> { UpdatePasswordAction },
+            Credentials = new List<CredentialRepresentation>
+            {
+                new()
+                {
+                    Type = "password",
+                    Value = temporaryPassword,
+                    Temporary = true
+                }
+            }
+        };
+
+        using var client = await CreateAuthenticatedHttpClientAsync(cancellationToken);
+        using var response = await client.PostAsync(
+            $"admin/realms/{Uri.EscapeDataString(realm)}/users",
+            CreateJsonContent(user),
+            cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ConflictException(
+                $"A Keycloak user with email '{email}' already exists.");
+        }
+
+        response.EnsureSuccessStatusCode();
+        var userId = GetCreatedUserId(response.Headers.Location);
+
+        try
+        {
+            await AssignRealmRoleAsync(userId, role, cancellationToken);
+        }
+        catch
+        {
+            try
+            {
+                await DeleteUserAsync(userId, cancellationToken);
+            }
+            catch
+            {
+                // Preserve the role-assignment failure; deleting the partial user is best effort.
+            }
+
+            throw;
+        }
+
+        return userId;
+    }
+
+    public async Task AssignPracticeAsync(
+        string keycloakUserId,
+        string practiceSlug,
+        CancellationToken cancellationToken)
+    {
+        var (realm, _) = GetKeycloakConfiguration();
+        var userUri =
+            $"admin/realms/{Uri.EscapeDataString(realm)}/users/{Uri.EscapeDataString(keycloakUserId)}";
+        using var client = await CreateAuthenticatedHttpClientAsync(cancellationToken);
+        using var getResponse = await client.GetAsync(userUri, cancellationToken);
+        if (getResponse.StatusCode == HttpStatusCode.NotFound)
+        {
+            throw new NotFoundException(
+                $"Keycloak user '{keycloakUserId}' was not found.");
+        }
+
+        getResponse.EnsureSuccessStatusCode();
+        var user = await DeserializeAsync<UserRepresentation>(
+            getResponse,
+            cancellationToken)
+            ?? throw new InvalidOperationException(
+                $"Keycloak did not return user '{keycloakUserId}'.");
+        user.Attributes ??= new Dictionary<string, ICollection<string>>();
+        user.Attributes[PracticeAttribute] = new List<string>
+        {
+            practiceSlug
+        };
+
+        using var putResponse = await client.PutAsync(
+            userUri,
+            CreateJsonContent(user),
+            cancellationToken);
+        putResponse.EnsureSuccessStatusCode();
+    }
+
+    public async Task DeleteUserAsync(
+        string keycloakUserId,
+        CancellationToken cancellationToken)
+    {
+        var (realm, _) = GetKeycloakConfiguration();
+        using var client = await CreateAuthenticatedHttpClientAsync(cancellationToken);
+        using var response = await client.DeleteAsync(
+            $"admin/realms/{Uri.EscapeDataString(realm)}/users/{Uri.EscapeDataString(keycloakUserId)}",
+            cancellationToken);
+
+        if (response.StatusCode != HttpStatusCode.NotFound)
+        {
+            response.EnsureSuccessStatusCode();
+        }
+    }
 
     public async Task<IReadOnlyList<ManagedUserModel>> ListPracticeUsersAsync(
         Guid practiceId,

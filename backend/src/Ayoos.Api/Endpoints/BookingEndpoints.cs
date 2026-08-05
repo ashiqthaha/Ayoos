@@ -1,7 +1,8 @@
 using System.Security.Claims;
 using Ayoos.Api.Authentication;
 using Ayoos.Application.Bookings;
-using Ayoos.Application.Bookings.CancelBooking;
+using Ayoos.Application.Bookings.CancelBookingByPatient;
+using Ayoos.Application.Bookings.CancelBookingByProvider;
 using Ayoos.Application.Bookings.CompleteBooking;
 using Ayoos.Application.Bookings.ConfirmBooking;
 using Ayoos.Application.Bookings.CreateBooking;
@@ -23,83 +24,70 @@ internal static class BookingEndpoints
     public static IEndpointRouteBuilder MapBookingEndpoints(
         this IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/api/bookings")
+        var bookings = endpoints.MapGroup("/api/bookings")
             .WithTags("Bookings")
             .RequireAuthorization(AuthorizationPolicies.AuthenticatedUser)
-            .AddEndpointFilter(async (context, next) =>
-            {
-                var httpContext = context.HttpContext;
-                if (httpContext.GetMultiTenantContext<TenantInfo>().TenantInfo is not null)
-                {
-                    return await next(context);
-                }
+            .AddEndpointFilter(RequireTenantAsync);
 
-                var tenant = httpContext.User.FindFirst("practice")?.Value
-                    ?? httpContext.User.FindFirst("tenant")?.Value
-                    ?? httpContext.Request.Headers["X-Tenant"].ToString();
-                return Results.Problem(
-                    statusCode: StatusCodes.Status404NotFound,
-                    title: "Tenant not found.",
-                    detail: string.IsNullOrWhiteSpace(tenant)
-                        ? "A practice or tenant token claim, or the X-Tenant header, is required."
-                        : $"No tenant registration was found for '{tenant}'.");
-            });
-
-        group.MapPost(string.Empty, CreateBookingAsync)
+        bookings.MapPost(string.Empty, CreateBookingAsync)
             .WithName("CreateBooking")
-            .WithSummary("Requests a booking for an exact computed provider slot.")
-            .WithDescription("Patients can request bookings only for their linked patient record. Staff and practice administrators can request on a patient's behalf.")
-            .Produces<BookingModel>(StatusCodes.Status201Created)
+            .WithSummary("Creates a pending booking or previews active overlap conflicts.")
+            .WithDescription("The requested UTC interval must exactly match a generated, non-excepted provider slot. Repeat with force=true only after explicitly acknowledging the returned conflicts.")
+            .Produces<CreateBookingResult>(StatusCodes.Status200OK)
+            .Produces<CreateBookingResult>(StatusCodes.Status201Created)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .RequireAuthorization(policy =>
-                policy.RequireRole("patient", "staff", "practice-admin"));
+                policy.RequireRole("patient", "provider", "practice-admin"));
 
-        group.MapGet(string.Empty, ListBookingsAsync)
+        bookings.MapGet(string.Empty, ListBookingsAsync)
             .WithName("ListBookings")
-            .WithSummary("Lists bookings with provider, patient, date, status, and paging filters.")
-            .WithDescription("Patient users are always restricted to their own linked patient record.")
+            .WithSummary("Lists bookings with provider, patient, status, date, and paging filters.")
+            .WithDescription("Patients are restricted to bookings for their linked patient record.")
             .Produces<PagedBookingListModel>()
-            .ProducesProblem(StatusCodes.Status403Forbidden);
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .RequireAuthorization(policy =>
+                policy.RequireRole("patient", "provider", "practice-admin"));
 
-        group.MapGet("/provider-schedule", GetProviderScheduleAsync)
-            .WithName("GetProviderBookingSchedule")
-            .WithSummary("Gets a provider's bookings over an inclusive date range.")
-            .Produces<IReadOnlyList<BookingModel>>()
-            .ProducesValidationProblem()
-            .ProducesProblem(StatusCodes.Status404NotFound)
-            .RequireAuthorization(AuthorizationPolicies.ProviderOrAdmin);
-
-        group.MapGet("/{id:guid}", GetBookingAsync)
-            .WithName("GetBooking")
-            .WithSummary("Gets a booking in the current practice tenant.")
-            .WithDescription("Patient users may retrieve only their own bookings.")
+        bookings.MapGet("/{id:guid}", GetBookingAsync)
+            .WithName("GetBookingById")
+            .WithSummary("Gets one tenant-scoped booking.")
             .Produces<BookingModel>()
             .ProducesProblem(StatusCodes.Status403Forbidden)
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireAuthorization(policy =>
+                policy.RequireRole("patient", "provider", "practice-admin"));
 
-        group.MapPost("/{id:guid}/confirm", ConfirmBookingAsync)
+        bookings.MapPost("/{id:guid}/confirm", ConfirmBookingAsync)
             .WithName("ConfirmBooking")
-            .WithSummary("Confirms a requested booking.")
+            .WithSummary("Confirms a pending booking after rechecking active overlaps.")
             .Produces<BookingModel>()
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .RequireAuthorization(AuthorizationPolicies.ProviderOrAdmin);
 
-        group.MapPost("/{id:guid}/cancel", CancelBookingAsync)
-            .WithName("CancelBooking")
-            .WithSummary("Cancels a requested or confirmed booking.")
-            .WithDescription("Patients can cancel only their own bookings. Staff and practice administrators can cancel any booking in the tenant.")
+        bookings.MapPost("/{id:guid}/cancel-patient", CancelBookingByPatientAsync)
+            .WithName("CancelBookingByPatient")
+            .WithSummary("Cancels a pending or confirmed booking as the patient.")
+            .WithDescription("Patients may cancel only their own bookings. Providers and practice administrators may manage any booking in the tenant.")
             .Produces<BookingModel>()
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .RequireAuthorization(policy =>
-                policy.RequireRole("patient", "staff", "practice-admin"));
+                policy.RequireRole("patient", "provider", "practice-admin"));
 
-        group.MapPost("/{id:guid}/complete", CompleteBookingAsync)
+        bookings.MapPost("/{id:guid}/cancel-provider", CancelBookingByProviderAsync)
+            .WithName("CancelBookingByProvider")
+            .WithSummary("Cancels a pending or confirmed booking as the provider.")
+            .Produces<BookingModel>()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .RequireAuthorization(AuthorizationPolicies.ProviderOrAdmin);
+
+        bookings.MapPost("/{id:guid}/complete", CompleteBookingAsync)
             .WithName("CompleteBooking")
             .WithSummary("Marks a confirmed booking complete.")
             .Produces<BookingModel>()
@@ -107,7 +95,7 @@ internal static class BookingEndpoints
             .ProducesProblem(StatusCodes.Status409Conflict)
             .RequireAuthorization(AuthorizationPolicies.ProviderOrAdmin);
 
-        group.MapPost("/{id:guid}/no-show", MarkNoShowAsync)
+        bookings.MapPost("/{id:guid}/no-show", MarkNoShowAsync)
             .WithName("MarkBookingNoShow")
             .WithSummary("Marks a confirmed booking as a no-show.")
             .Produces<BookingModel>()
@@ -115,7 +103,42 @@ internal static class BookingEndpoints
             .ProducesProblem(StatusCodes.Status409Conflict)
             .RequireAuthorization(AuthorizationPolicies.ProviderOrAdmin);
 
+        endpoints.MapGet(
+                "/api/providers/{providerId:guid}/schedule",
+                GetProviderScheduleAsync)
+            .WithTags("Bookings")
+            .WithName("GetProviderSchedule")
+            .WithSummary("Gets booked appointments and generated open slots over an inclusive date range.")
+            .WithDescription("Patient responses omit booking details and expose only open slots.")
+            .Produces<ProviderScheduleModel>()
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireAuthorization(policy =>
+                policy.RequireRole("patient", "provider", "practice-admin"))
+            .AddEndpointFilter(RequireTenantAsync);
+
         return endpoints;
+    }
+
+    private static async ValueTask<object?> RequireTenantAsync(
+        EndpointFilterInvocationContext context,
+        EndpointFilterDelegate next)
+    {
+        var httpContext = context.HttpContext;
+        if (httpContext.GetMultiTenantContext<TenantInfo>().TenantInfo is not null)
+        {
+            return await next(context);
+        }
+
+        var tenant = httpContext.User.FindFirst("practice")?.Value
+            ?? httpContext.User.FindFirst("tenant")?.Value
+            ?? httpContext.Request.Headers["X-Tenant"].ToString();
+        return Results.Problem(
+            statusCode: StatusCodes.Status404NotFound,
+            title: "Tenant not found.",
+            detail: string.IsNullOrWhiteSpace(tenant)
+                ? "A practice or tenant token claim, or the X-Tenant header, is required."
+                : $"No tenant registration was found for '{tenant}'.");
     }
 
     private static async Task<IResult> CreateBookingAsync(
@@ -139,15 +162,17 @@ internal static class BookingEndpoints
         }
 
         var result = await sender.Send(request.ToCommand(), cancellationToken);
-        return Results.Created($"/api/bookings/{result.Id}", result);
+        return result.Booking is null
+            ? Results.Ok(result)
+            : Results.Created($"/api/bookings/{result.Booking.Id}", result);
     }
 
     private static async Task<IResult> ListBookingsAsync(
         [FromHeader(Name = "X-Tenant")] string? _tenant,
         [FromQuery] Guid? providerId,
         [FromQuery] Guid? patientId,
-        [FromQuery] DateOnly? fromDate,
-        [FromQuery] DateOnly? toDate,
+        [FromQuery(Name = "from")] DateOnly? fromDate,
+        [FromQuery(Name = "to")] DateOnly? toDate,
         [FromQuery] BookingStatus? status,
         [FromQuery] int page,
         [FromQuery] int pageSize,
@@ -184,7 +209,7 @@ internal static class BookingEndpoints
         ISender sender,
         CancellationToken cancellationToken)
     {
-        var result = await sender.Send(new GetBookingQuery(id), cancellationToken);
+        var result = await sender.Send(new GetBookingByIdQuery(id), cancellationToken);
         if (result is null)
         {
             return Results.Problem(
@@ -205,15 +230,21 @@ internal static class BookingEndpoints
     }
 
     private static async Task<IResult> GetProviderScheduleAsync(
+        Guid providerId,
         [FromHeader(Name = "X-Tenant")] string? _tenant,
-        [FromQuery] Guid providerId,
         [FromQuery(Name = "from")] DateOnly fromDate,
         [FromQuery(Name = "to")] DateOnly toDate,
+        ClaimsPrincipal user,
         ISender sender,
-        CancellationToken cancellationToken) =>
-        Results.Ok(await sender.Send(
+        CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(
             new GetProviderScheduleQuery(providerId, fromDate, toDate),
-            cancellationToken));
+            cancellationToken);
+        return Results.Ok(IsPatientActor(user)
+            ? result with { Bookings = [] }
+            : result);
+    }
 
     private static async Task<IResult> ConfirmBookingAsync(
         Guid id,
@@ -224,16 +255,19 @@ internal static class BookingEndpoints
             new ConfirmBookingCommand(id),
             cancellationToken));
 
-    private static async Task<IResult> CancelBookingAsync(
+    private static async Task<IResult> CancelBookingByPatientAsync(
         Guid id,
         [FromHeader(Name = "X-Tenant")] string? _tenant,
+        CancellationRequest? request,
         ClaimsPrincipal user,
         ISender sender,
         CancellationToken cancellationToken)
     {
         if (IsPatientActor(user))
         {
-            var booking = await sender.Send(new GetBookingQuery(id), cancellationToken);
+            var booking = await sender.Send(
+                new GetBookingByIdQuery(id),
+                cancellationToken);
             if (booking is null)
             {
                 return Results.Problem(
@@ -249,9 +283,19 @@ internal static class BookingEndpoints
         }
 
         return Results.Ok(await sender.Send(
-            new CancelBookingCommand(id),
+            new CancelBookingByPatientCommand(id, request?.CancellationReason),
             cancellationToken));
     }
+
+    private static async Task<IResult> CancelBookingByProviderAsync(
+        Guid id,
+        [FromHeader(Name = "X-Tenant")] string? _tenant,
+        CancellationRequest? request,
+        ISender sender,
+        CancellationToken cancellationToken) =>
+        Results.Ok(await sender.Send(
+            new CancelBookingByProviderCommand(id, request?.CancellationReason),
+            cancellationToken));
 
     private static async Task<IResult> CompleteBookingAsync(
         Guid id,
@@ -273,7 +317,6 @@ internal static class BookingEndpoints
 
     private static bool IsPatientActor(ClaimsPrincipal user) =>
         user.IsInRole("patient") &&
-        !user.IsInRole("staff") &&
         !user.IsInRole("provider") &&
         !user.IsInRole("practice-admin");
 
@@ -305,16 +348,20 @@ internal sealed record CreateBookingRequest(
     Guid PatientId,
     Guid ProviderId,
     Guid? AvailabilityScheduleId,
-    DateTimeOffset StartTime,
-    DateTimeOffset EndTime,
-    string? Reason)
+    DateTimeOffset ScheduledStart,
+    DateTimeOffset ScheduledEnd,
+    string? Reason,
+    bool Force = false)
 {
     public CreateBookingCommand ToCommand() =>
         new(
             PatientId,
             ProviderId,
             AvailabilityScheduleId,
-            StartTime,
-            EndTime,
-            Reason);
+            ScheduledStart,
+            ScheduledEnd,
+            Reason,
+            Force);
 }
+
+internal sealed record CancellationRequest(string? CancellationReason = null);

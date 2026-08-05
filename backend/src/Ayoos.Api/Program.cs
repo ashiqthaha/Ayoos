@@ -95,6 +95,7 @@ app.MapGet("/", () => Results.Ok(new
 }));
 app.MapHealthChecks("/health");
 app.MapPracticeEndpoints();
+app.MapPracticeInvitationEndpoints();
 app.MapProviderEndpoints();
 app.MapProviderAvailabilityEndpoints();
 app.MapPatientEndpoints();

@@ -13,7 +13,9 @@ public sealed class CompleteBookingCommandValidator
         BookingValidation.AddBookingIdRule(this, command => command.BookingId);
 }
 
-internal sealed class CompleteBookingCommandHandler(IBookingRepository repository)
+internal sealed class CompleteBookingCommandHandler(
+    IBookingRepository repository,
+    TimeProvider timeProvider)
     : IRequestHandler<CompleteBookingCommand, BookingModel>
 {
     public Task<BookingModel> Handle(
@@ -22,6 +24,6 @@ internal sealed class CompleteBookingCommandHandler(IBookingRepository repositor
         BookingStatusTransition.ApplyAsync(
             request.BookingId,
             repository,
-            booking => booking.Complete(),
+            booking => booking.Complete(timeProvider.GetUtcNow()),
             cancellationToken);
 }

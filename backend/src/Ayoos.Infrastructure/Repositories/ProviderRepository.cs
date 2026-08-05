@@ -49,23 +49,41 @@ internal sealed class ProviderRepository(AyoosDbContext dbContext)
                 schedule.Id == availabilityId,
             cancellationToken);
 
-    public Task<bool> HasAvailabilityOverlapAsync(
+    public async Task<IReadOnlyList<AvailabilitySchedule>> ListActiveAvailabilitySchedulesAsync(
         Guid providerId,
         DayOfWeek dayOfWeek,
-        TimeOnly startTime,
-        TimeOnly endTime,
-        Guid? excludeAvailabilityId = null,
         CancellationToken cancellationToken = default) =>
-        dbContext.AvailabilitySchedules.AnyAsync(
+        await dbContext.AvailabilitySchedules
+            .Where(
             schedule =>
                 schedule.ProviderId == providerId &&
                 schedule.IsActive &&
-                schedule.DayOfWeek == dayOfWeek &&
-                schedule.StartTime < endTime &&
-                schedule.EndTime > startTime &&
-                (!excludeAvailabilityId.HasValue ||
-                    schedule.Id != excludeAvailabilityId.Value),
+                schedule.DayOfWeek == dayOfWeek)
+            .OrderBy(schedule => schedule.StartTime)
+            .ToListAsync(cancellationToken);
+
+    public Task<AvailabilityException?> GetAvailabilityExceptionAsync(
+        Guid providerId,
+        Guid exceptionId,
+        CancellationToken cancellationToken = default) =>
+        dbContext.AvailabilityExceptions.SingleOrDefaultAsync(
+            exception =>
+                exception.ProviderId == providerId &&
+                exception.Id == exceptionId,
             cancellationToken);
+
+    public async Task<IReadOnlyList<AvailabilityException>> ListAvailabilityExceptionsAsync(
+        Guid providerId,
+        DateOnly fromDate,
+        DateOnly toDate,
+        CancellationToken cancellationToken = default) =>
+        await dbContext.AvailabilityExceptions
+            .Where(exception =>
+                exception.ProviderId == providerId &&
+                exception.Date >= fromDate &&
+                exception.Date <= toDate)
+            .OrderBy(exception => exception.Date)
+            .ToListAsync(cancellationToken);
 
     public async Task AddAvailabilityScheduleAsync(
         AvailabilitySchedule schedule,

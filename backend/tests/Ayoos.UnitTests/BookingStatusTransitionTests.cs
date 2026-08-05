@@ -1,56 +1,65 @@
 using Ayoos.Domain.Bookings;
+using Ayoos.Domain.Common;
 
 namespace Ayoos.UnitTests;
 
 public sealed class BookingStatusTransitionTests
 {
     [Fact]
-    public void Requested_can_be_confirmed_then_completed()
+    public void Pending_can_be_confirmed_then_completed()
     {
         var booking = CreateBooking();
 
-        booking.Confirm();
+        Assert.Equal(BookingStatus.Pending, booking.Status);
+        booking.Confirm(ChangedAt);
         Assert.Equal(BookingStatus.Confirmed, booking.Status);
 
-        booking.Complete();
+        booking.Complete(ChangedAt.AddMinutes(1));
         Assert.Equal(BookingStatus.Completed, booking.Status);
-        Assert.Throws<InvalidOperationException>(booking.Cancel);
-        Assert.Throws<InvalidOperationException>(booking.MarkNoShow);
+        Assert.Equal(ChangedAt.AddMinutes(1), booking.UpdatedAt);
+        Assert.Throws<DomainException>(() => booking.CancelByPatient());
+        Assert.Throws<DomainException>(() => booking.MarkNoShow());
+        Assert.Throws<DomainException>(() => booking.Confirm());
     }
 
     [Fact]
-    public void Requested_or_confirmed_can_be_cancelled_and_cancelled_is_terminal()
+    public void Patient_and_provider_cancellation_are_distinct_terminal_states()
     {
-        var requested = CreateBooking();
-        requested.Cancel();
-        Assert.Equal(BookingStatus.Cancelled, requested.Status);
-        Assert.Throws<InvalidOperationException>(requested.Confirm);
+        var patientCancellation = CreateBooking();
+        patientCancellation.CancelByPatient("Travel conflict", ChangedAt);
+        Assert.Equal(BookingStatus.CancelledByPatient, patientCancellation.Status);
+        Assert.Equal("Travel conflict", patientCancellation.CancellationReason);
+        Assert.Throws<DomainException>(() => patientCancellation.Confirm());
 
-        var confirmed = CreateBooking();
-        confirmed.Confirm();
-        confirmed.Cancel();
-        Assert.Equal(BookingStatus.Cancelled, confirmed.Status);
-        Assert.Throws<InvalidOperationException>(confirmed.Complete);
+        var providerCancellation = CreateBooking();
+        providerCancellation.Confirm(ChangedAt);
+        providerCancellation.CancelByProvider("Provider unavailable", ChangedAt.AddMinutes(1));
+        Assert.Equal(BookingStatus.CancelledByProvider, providerCancellation.Status);
+        Assert.Equal("Provider unavailable", providerCancellation.CancellationReason);
+        Assert.Throws<DomainException>(() => providerCancellation.Complete());
     }
 
     [Fact]
     public void No_show_requires_confirmation_and_is_terminal()
     {
-        var requested = CreateBooking();
-        Assert.Throws<InvalidOperationException>(requested.MarkNoShow);
+        var pending = CreateBooking();
+        Assert.Throws<DomainException>(() => pending.MarkNoShow());
 
         var confirmed = CreateBooking();
-        confirmed.Confirm();
-        confirmed.MarkNoShow();
+        confirmed.Confirm(ChangedAt);
+        confirmed.MarkNoShow(ChangedAt.AddMinutes(1));
 
         Assert.Equal(BookingStatus.NoShow, confirmed.Status);
-        Assert.Throws<InvalidOperationException>(confirmed.Cancel);
-        Assert.Throws<InvalidOperationException>(confirmed.Complete);
+        Assert.Throws<DomainException>(() => confirmed.CancelByProvider());
+        Assert.Throws<DomainException>(() => confirmed.Complete());
     }
+
+    private static readonly DateTimeOffset ChangedAt =
+        new(2030, 1, 6, 10, 0, 0, TimeSpan.Zero);
 
     private static Booking CreateBooking()
     {
-        var start = new DateTimeOffset(2026, 8, 3, 9, 0, 0, TimeSpan.Zero);
+        var start = new DateTimeOffset(2030, 1, 7, 9, 0, 0, TimeSpan.Zero);
         return Booking.Create(
             Guid.NewGuid().ToString("D"),
             Guid.NewGuid(),
@@ -59,6 +68,6 @@ public sealed class BookingStatusTransitionTests
             start,
             start.AddMinutes(30),
             "Check-up",
-            start.AddDays(-1));
+            ChangedAt.AddDays(-1));
     }
 }

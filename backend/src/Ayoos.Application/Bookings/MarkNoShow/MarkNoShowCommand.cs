@@ -13,7 +13,9 @@ public sealed class MarkNoShowCommandValidator
         BookingValidation.AddBookingIdRule(this, command => command.BookingId);
 }
 
-internal sealed class MarkNoShowCommandHandler(IBookingRepository repository)
+internal sealed class MarkNoShowCommandHandler(
+    IBookingRepository repository,
+    TimeProvider timeProvider)
     : IRequestHandler<MarkNoShowCommand, BookingModel>
 {
     public Task<BookingModel> Handle(
@@ -22,6 +24,6 @@ internal sealed class MarkNoShowCommandHandler(IBookingRepository repository)
         BookingStatusTransition.ApplyAsync(
             request.BookingId,
             repository,
-            booking => booking.MarkNoShow(),
+            booking => booking.MarkNoShow(timeProvider.GetUtcNow()),
             cancellationToken);
 }
