@@ -67,6 +67,17 @@ public sealed class BookingTenantPersistenceTests
             Assert.NotNull(sameTenant.Model
                 .FindEntityType(typeof(Booking))?
                 .FindProperty(nameof(Booking.TenantId)));
+            var bookingType = sameTenant.Model.FindEntityType(typeof(Booking));
+            Assert.True(bookingType?
+                .FindProperty(nameof(Booking.RowVersion))?
+                .IsConcurrencyToken);
+            var slotIndex = Assert.Single(bookingType!.GetIndexes(), index =>
+                index.Properties.Select(property => property.Name).SequenceEqual(
+                    [nameof(Booking.TenantId), nameof(Booking.ProviderId), nameof(Booking.ScheduledStart)]));
+            Assert.True(slotIndex.IsUnique);
+            Assert.Equal(
+                "\"Status\" IN ('Pending', 'Confirmed')",
+                slotIndex.GetFilter());
         }
 
         await using var otherTenant = CreateContext(

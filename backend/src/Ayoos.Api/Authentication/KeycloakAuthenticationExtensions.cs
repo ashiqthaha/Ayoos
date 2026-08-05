@@ -53,6 +53,9 @@ internal static class KeycloakAuthenticationExtensions
 
         services.AddAuthorizationBuilder()
             .AddPolicy(
+                AuthorizationPolicies.SuperAdmin,
+                policy => policy.RequireRole("ayoos-superadmin"))
+            .AddPolicy(
                 AuthorizationPolicies.PracticeAdmin,
                 policy => policy.RequireRole("practice-admin"))
             .AddPolicy(

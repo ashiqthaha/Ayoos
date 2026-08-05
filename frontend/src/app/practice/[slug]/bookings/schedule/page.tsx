@@ -13,16 +13,18 @@ import {
   listProviders,
   type Booking,
   type BookingStatus,
+  type AvailabilitySlot,
   type Patient,
   type Provider,
 } from "@/lib/api";
 
 const statusLabels: Record<BookingStatus, string> = {
-  0: "Requested",
+  0: "Pending",
   1: "Confirmed",
-  2: "Cancelled",
-  3: "Completed",
-  4: "No-show",
+  2: "Cancelled by patient",
+  3: "Cancelled by provider",
+  4: "Completed",
+  5: "No-show",
 };
 
 function dateKey(date: Date) {
@@ -61,6 +63,7 @@ export default function ProviderBookingSchedulePage() {
   const [providerId, setProviderId] = useState("");
   const [weekStart, setWeekStart] = useState(() => startOfWeek());
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [openSlots, setOpenSlots] = useState<AvailabilitySlot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -109,13 +112,15 @@ export default function ProviderBookingSchedulePage() {
       setIsLoading(true);
       setError(null);
       try {
-        setBookings(await getProviderBookingSchedule(
+        const schedule = await getProviderBookingSchedule(
           slug,
           providerId,
           dateKey(weekStart),
           dateKey(addDays(weekStart, 6)),
           controller.signal,
-        ));
+        );
+        setBookings(schedule.bookings);
+        setOpenSlots(schedule.openSlots);
       } catch (loadError) {
         if (!controller.signal.aborted) {
           setError(loadError instanceof Error ? loadError.message : "We couldn't load this schedule.");
@@ -190,7 +195,8 @@ export default function ProviderBookingSchedulePage() {
                 <div className="grid min-w-[70rem] grid-cols-7 divide-x divide-slate-100">
                   {week.map((day) => {
                     const key = dateKey(day);
-                    const daily = bookings.filter((booking) => booking.startTime.slice(0, 10) === key);
+                    const daily = bookings.filter((booking) => booking.scheduledStart.slice(0, 10) === key);
+                    const dailyOpenSlots = openSlots.filter((slot) => slot.date === key);
                     return (
                       <section key={key} className="min-h-[28rem] bg-white">
                         <header className={`border-b border-slate-100 px-3 py-4 text-center ${key === dateKey(new Date()) ? "bg-teal-50" : "bg-slate-50/60"}`}>
@@ -198,11 +204,17 @@ export default function ProviderBookingSchedulePage() {
                           <p className="mt-1 text-lg font-semibold text-slate-950">{day.getDate()}</p>
                         </header>
                         <div className="grid gap-2 p-2.5">
-                          {daily.length === 0 ? <p className="py-8 text-center text-xs text-slate-400">No bookings</p> : daily.map((booking) => (
-                            <article key={booking.id} className={`rounded-xl border p-3 text-xs ${booking.status === 2 ? "border-slate-200 bg-slate-50 opacity-60" : "border-teal-100 bg-teal-50/60"}`}>
-                              <p className="font-semibold text-slate-950">{displayTime(booking.startTime)}–{displayTime(booking.endTime)}</p>
+                          {daily.length === 0 && dailyOpenSlots.length === 0 ? <p className="py-8 text-center text-xs text-slate-400">No availability</p> : daily.map((booking) => (
+                            <article key={booking.id} className={`rounded-xl border p-3 text-xs ${booking.status === 2 || booking.status === 3 ? "border-slate-200 bg-slate-50 opacity-60" : "border-teal-100 bg-teal-50/60"}`}>
+                              <p className="font-semibold text-slate-950">{displayTime(booking.scheduledStart)}–{displayTime(booking.scheduledEnd)}</p>
                               <p className="mt-1 truncate text-slate-600">{patientNames.get(booking.patientId) || `Patient ${booking.patientId.slice(0, 8)}`}</p>
                               <p className="mt-2 font-semibold text-teal-700">{statusLabels[booking.status]}</p>
+                            </article>
+                          ))}
+                          {dailyOpenSlots.map((slot) => (
+                            <article key={`${slot.date}-${slot.startTime}`} className="rounded-xl border border-dashed border-teal-200 bg-white p-3 text-xs">
+                              <p className="font-semibold text-teal-800">{displayTime(`${slot.date}T${slot.startTime}Z`)}–{displayTime(`${slot.date}T${slot.endTime}Z`)}</p>
+                              <p className="mt-1 text-slate-400">Open slot</p>
                             </article>
                           ))}
                         </div>

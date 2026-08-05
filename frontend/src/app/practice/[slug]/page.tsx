@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 
 import { AyoosMark } from "@/components/ayoos-mark";
+import { useAuth } from "@/components/auth-provider";
+import { RequireRole } from "@/components/require-role";
 import { UserMenu } from "@/components/user-menu";
 import {
   PracticeAddressFields,
@@ -18,6 +20,7 @@ import {
   type Practice,
   type PracticeInput,
 } from "@/lib/api";
+import { getRealmRoles } from "@/lib/auth-client";
 import {
   normalizePractice,
   toKebabCase,
@@ -51,7 +54,11 @@ function practiceToInput(practice: Practice): PracticeInput {
 export default function PracticeDashboardPage() {
   const params = useParams<{ slug: string }>();
   const router = useRouter();
+  const { user } = useAuth();
   const slug = params.slug;
+  const canManagePractice = user
+    ? getRealmRoles(user).includes("practice-admin")
+    : false;
   const [practice, setPractice] = useState<Practice | null>(null);
   const [form, setForm] = useState<PracticeInput | null>(null);
   const [errors, setErrors] = useState<PracticeFieldErrors>({});
@@ -196,10 +203,10 @@ export default function PracticeDashboardPage() {
             The link may be outdated, or this practice has not been set up yet.
           </p>
           <a
-            href="/setup/practice"
+            href="/"
             className="mt-7 inline-flex rounded-xl bg-teal-700 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-700/15 transition hover:bg-teal-800 focus:outline-none focus:ring-4 focus:ring-teal-500/20"
           >
-            Set up a practice
+            Return to Ayoos
           </a>
         </section>
       </main>
@@ -270,18 +277,20 @@ export default function PracticeDashboardPage() {
                 >
                   Manage bookings
                 </Link>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setForm(practiceToInput(practice));
-                    setErrors({});
-                    setBanner(null);
-                    setIsEditing(true);
-                  }}
-                  className="inline-flex w-fit items-center justify-center rounded-xl bg-teal-700 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-700/15 transition hover:bg-teal-800 focus:outline-none focus:ring-4 focus:ring-teal-500/20"
-                >
-                  Edit practice
-                </button>
+                {canManagePractice && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForm(practiceToInput(practice));
+                      setErrors({});
+                      setBanner(null);
+                      setIsEditing(true);
+                    }}
+                    className="inline-flex w-fit items-center justify-center rounded-xl bg-teal-700 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-teal-700/15 transition hover:bg-teal-800 focus:outline-none focus:ring-4 focus:ring-teal-500/20"
+                  >
+                    Edit practice
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -300,11 +309,12 @@ export default function PracticeDashboardPage() {
           )}
 
           {isEditing ? (
-            <form
-              onSubmit={handleSave}
-              noValidate
-              className="mt-8 overflow-hidden rounded-3xl border border-white bg-white shadow-[0_24px_70px_rgba(15,118,110,0.09)]"
-            >
+            <RequireRole requiredRoles="practice-admin">
+              <form
+                onSubmit={handleSave}
+                noValidate
+                className="mt-8 overflow-hidden rounded-3xl border border-white bg-white shadow-[0_24px_70px_rgba(15,118,110,0.09)]"
+              >
               <div className="border-b border-slate-100 px-6 py-6 sm:px-9 sm:py-8">
                 <h2 className="text-2xl font-semibold tracking-[-0.03em] text-slate-950">
                   Edit practice details
@@ -355,7 +365,8 @@ export default function PracticeDashboardPage() {
                   {isSaving ? "Saving…" : "Save changes"}
                 </button>
               </div>
-            </form>
+              </form>
+            </RequireRole>
           ) : (
             <section className="mt-8 overflow-hidden rounded-3xl border border-white bg-white shadow-[0_24px_70px_rgba(15,118,110,0.09)]">
               <div className="border-b border-slate-100 px-6 py-6 sm:px-9">

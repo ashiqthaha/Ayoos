@@ -35,7 +35,7 @@ public sealed class ProviderTenantPersistenceTests
                 provider.Id,
                 tenantId,
                 new DateOnly(2026, 8, 10),
-                true,
+                AvailabilityExceptionType.Unavailable,
                 null,
                 null,
                 "Conference");

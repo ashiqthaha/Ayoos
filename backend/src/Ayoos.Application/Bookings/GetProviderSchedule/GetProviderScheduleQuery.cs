@@ -1,5 +1,6 @@
 using Ayoos.Application.Common.Exceptions;
 using Ayoos.Application.Common.Interfaces;
+using Ayoos.Application.Providers;
 using FluentValidation;
 using MediatR;
 
@@ -8,7 +9,7 @@ namespace Ayoos.Application.Bookings.GetProviderSchedule;
 public sealed record GetProviderScheduleQuery(
     Guid ProviderId,
     DateOnly FromDate,
-    DateOnly ToDate) : IRequest<IReadOnlyList<BookingModel>>;
+    DateOnly ToDate) : IRequest<ProviderScheduleModel>;
 
 public sealed class GetProviderScheduleQueryValidator
     : AbstractValidator<GetProviderScheduleQuery>
@@ -28,16 +29,18 @@ public sealed class GetProviderScheduleQueryValidator
 
 internal sealed class GetProviderScheduleQueryHandler(
     IProviderRepository providerRepository,
-    IBookingRepository bookingRepository)
-    : IRequestHandler<GetProviderScheduleQuery, IReadOnlyList<BookingModel>>
+    IBookingRepository bookingRepository,
+    AvailabilitySlotGenerator slotGenerator)
+    : IRequestHandler<GetProviderScheduleQuery, ProviderScheduleModel>
 {
-    public async Task<IReadOnlyList<BookingModel>> Handle(
+    public async Task<ProviderScheduleModel> Handle(
         GetProviderScheduleQuery request,
         CancellationToken cancellationToken)
     {
         var provider = await providerRepository.GetByIdAsync(
             request.ProviderId,
-            cancellationToken: cancellationToken);
+            includeAvailability: true,
+            cancellationToken);
         if (provider is null)
         {
             throw new NotFoundException(
@@ -49,6 +52,25 @@ internal sealed class GetProviderScheduleQueryHandler(
             request.FromDate,
             request.ToDate,
             cancellationToken);
-        return bookings.Select(booking => booking.ToModel()).ToArray();
+        var generatedSlots = provider.IsActive
+            ? slotGenerator.Generate(
+                provider.AvailabilitySchedules,
+                provider.AvailabilityExceptions,
+                request.FromDate,
+                request.ToDate)
+            : [];
+        var openSlots = generatedSlots
+            .Where(slot => !bookings.Any(booking =>
+                booking.IsActive &&
+                booking.ScheduledStart < BookingSlotMatcher.ToUtc(slot.Date, slot.EndTime) &&
+                booking.ScheduledEnd > BookingSlotMatcher.ToUtc(slot.Date, slot.StartTime)))
+            .ToArray();
+
+        return new ProviderScheduleModel(
+            provider.Id,
+            request.FromDate,
+            request.ToDate,
+            bookings.Select(booking => booking.ToModel()).ToArray(),
+            openSlots);
     }
 }

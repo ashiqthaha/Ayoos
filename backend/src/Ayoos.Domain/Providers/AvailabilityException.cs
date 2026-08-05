@@ -14,19 +14,21 @@ public sealed class AvailabilityException : Entity
         Guid providerId,
         string tenantId,
         DateOnly date,
-        bool isUnavailable,
-        TimeOnly? overrideStartTime,
-        TimeOnly? overrideEndTime,
-        string? reason)
+        AvailabilityExceptionType exceptionType,
+        TimeOnly? startTime,
+        TimeOnly? endTime,
+        string? reason,
+        DateTimeOffset createdAtUtc)
         : base(id)
     {
         ProviderId = providerId;
         TenantId = tenantId;
         Date = date;
-        IsUnavailable = isUnavailable;
-        OverrideStartTime = overrideStartTime;
-        OverrideEndTime = overrideEndTime;
+        ExceptionType = exceptionType;
+        StartTime = startTime;
+        EndTime = endTime;
         Reason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        CreatedAtUtc = createdAtUtc.ToUniversalTime();
     }
 
     public Guid ProviderId { get; private set; }
@@ -35,39 +37,48 @@ public sealed class AvailabilityException : Entity
 
     public DateOnly Date { get; private set; }
 
-    public bool IsUnavailable { get; private set; }
+    public AvailabilityExceptionType ExceptionType { get; private set; }
 
-    public TimeOnly? OverrideStartTime { get; private set; }
+    public TimeOnly? StartTime { get; private set; }
 
-    public TimeOnly? OverrideEndTime { get; private set; }
+    public TimeOnly? EndTime { get; private set; }
 
     public string? Reason { get; private set; }
+
+    public DateTimeOffset CreatedAtUtc { get; private set; }
+
+    public DateTimeOffset? UpdatedAtUtc { get; private set; }
 
     public static AvailabilityException Create(
         Guid providerId,
         string tenantId,
         DateOnly date,
-        bool isUnavailable,
-        TimeOnly? overrideStartTime,
-        TimeOnly? overrideEndTime,
-        string? reason)
+        AvailabilityExceptionType exceptionType,
+        TimeOnly? startTime,
+        TimeOnly? endTime,
+        string? reason,
+        DateTimeOffset? createdAtUtc = null)
     {
         ArgumentOutOfRangeException.ThrowIfEqual(providerId, Guid.Empty);
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
 
-        if (isUnavailable && (overrideStartTime is not null || overrideEndTime is not null))
+        if (!Enum.IsDefined(exceptionType))
         {
-            throw new ArgumentException(
+            throw new DomainException("ExceptionType is invalid.");
+        }
+
+        if (exceptionType == AvailabilityExceptionType.Unavailable &&
+            (startTime is not null || endTime is not null))
+        {
+            throw new DomainException(
                 "Unavailable dates cannot also define override hours.");
         }
 
-        if (!isUnavailable &&
-            (overrideStartTime is null ||
-             overrideEndTime is null ||
-             overrideEndTime <= overrideStartTime))
+        if (exceptionType == AvailabilityExceptionType.CustomHours &&
+            (startTime is null || endTime is null || endTime <= startTime))
         {
-            throw new ArgumentException(
-                "Available exceptions require override hours with EndTime after StartTime.");
+            throw new DomainException(
+                "CustomHours exceptions require StartTime and EndTime, with EndTime after StartTime.");
         }
 
         return new AvailabilityException(
@@ -75,9 +86,10 @@ public sealed class AvailabilityException : Entity
             providerId,
             tenantId.Trim(),
             date,
-            isUnavailable,
-            overrideStartTime,
-            overrideEndTime,
-            reason);
+            exceptionType,
+            startTime,
+            endTime,
+            reason,
+            createdAtUtc ?? DateTimeOffset.UtcNow);
     }
 }

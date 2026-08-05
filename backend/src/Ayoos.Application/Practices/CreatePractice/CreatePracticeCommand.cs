@@ -9,4 +9,5 @@ public sealed record CreatePracticeCommand(
     string TimeZone,
     PracticeAddressModel Address,
     string ContactEmail,
-    string ContactPhone) : IRequest<PracticeModel>;
+    string ContactPhone,
+    string RawToken) : IRequest<PracticeModel>;

@@ -21,7 +21,7 @@ public sealed class AvailabilitySlotGenerator
         for (var date = fromDate; date <= toDate; date = date.AddDays(1))
         {
             exceptionsByDate.TryGetValue(date, out var exception);
-            if (exception?.IsUnavailable == true)
+            if (exception?.ExceptionType == AvailabilityExceptionType.Unavailable)
             {
                 continue;
             }
@@ -33,14 +33,14 @@ public sealed class AvailabilitySlotGenerator
                 .OrderBy(schedule => schedule.StartTime)
                 .ToArray();
 
-            if (exception is not null)
+            if (exception?.ExceptionType == AvailabilityExceptionType.CustomHours)
             {
                 var duration = dailySchedules.FirstOrDefault()?.SlotDurationMinutes ?? 30;
                 AddSlots(
                     slots,
                     date,
-                    exception.OverrideStartTime!.Value,
-                    exception.OverrideEndTime!.Value,
+                    exception.StartTime!.Value,
+                    exception.EndTime!.Value,
                     duration,
                     null);
                 continue;

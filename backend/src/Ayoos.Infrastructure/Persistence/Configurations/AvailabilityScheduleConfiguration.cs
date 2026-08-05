@@ -27,6 +27,8 @@ internal sealed class AvailabilityScheduleConfiguration
             .HasDefaultValue(30)
             .IsRequired();
         builder.Property(schedule => schedule.IsActive).IsRequired();
+        builder.Property(schedule => schedule.CreatedAtUtc).IsRequired();
+        builder.Property(schedule => schedule.UpdatedAtUtc);
 
         builder.HasIndex(schedule => new
         {

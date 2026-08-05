@@ -33,5 +33,9 @@ public sealed class CreatePracticeCommandValidator : AbstractValidator<CreatePra
         RuleFor(command => command.Address)
             .NotNull()
             .SetValidator(new PracticeAddressModelValidator());
+
+        RuleFor(command => command.RawToken)
+            .NotEmpty()
+            .MaximumLength(200);
     }
 }

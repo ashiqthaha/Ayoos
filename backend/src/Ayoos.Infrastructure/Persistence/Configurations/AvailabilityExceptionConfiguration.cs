@@ -17,12 +17,16 @@ internal sealed class AvailabilityExceptionConfiguration
         builder.Property(exception => exception.Date)
             .HasColumnType("date")
             .IsRequired();
-        builder.Property(exception => exception.IsUnavailable).IsRequired();
-        builder.Property(exception => exception.OverrideStartTime)
+        builder.Property(exception => exception.ExceptionType)
+            .HasConversion<int>()
+            .IsRequired();
+        builder.Property(exception => exception.StartTime)
             .HasColumnType("time without time zone");
-        builder.Property(exception => exception.OverrideEndTime)
+        builder.Property(exception => exception.EndTime)
             .HasColumnType("time without time zone");
         builder.Property(exception => exception.Reason).HasMaxLength(500);
+        builder.Property(exception => exception.CreatedAtUtc).IsRequired();
+        builder.Property(exception => exception.UpdatedAtUtc);
 
         builder.HasIndex(exception => new
             { exception.TenantId, exception.ProviderId, exception.Date })

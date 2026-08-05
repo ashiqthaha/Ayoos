@@ -36,7 +36,7 @@ internal sealed class BookingRepository(AyoosDbContext dbContext)
             status);
         var totalCount = await query.CountAsync(cancellationToken);
         var bookings = await query
-            .OrderBy(booking => booking.StartTime)
+            .OrderBy(booking => booking.ScheduledStart)
             .ThenBy(booking => booking.ProviderId)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -57,23 +57,25 @@ internal sealed class BookingRepository(AyoosDbContext dbContext)
                 fromDate,
                 toDate,
                 null)
-            .OrderBy(booking => booking.StartTime)
+            .OrderBy(booking => booking.ScheduledStart)
             .ToListAsync(cancellationToken);
 
-    public Task<bool> HasOverlapAsync(
+    public async Task<IReadOnlyList<Booking>> FindActiveOverlapsAsync(
         Guid providerId,
-        DateTimeOffset startTime,
-        DateTimeOffset endTime,
+        DateTimeOffset scheduledStart,
+        DateTimeOffset scheduledEnd,
         Guid? excludeBookingId = null,
         CancellationToken cancellationToken = default) =>
-        dbContext.Bookings.AnyAsync(
-            booking =>
+        await dbContext.Bookings
+            .Where(booking =>
                 booking.ProviderId == providerId &&
-                booking.Status != BookingStatus.Cancelled &&
-                booking.StartTime < endTime &&
-                booking.EndTime > startTime &&
-                (!excludeBookingId.HasValue || booking.Id != excludeBookingId.Value),
-            cancellationToken);
+                (booking.Status == BookingStatus.Pending ||
+                    booking.Status == BookingStatus.Confirmed) &&
+                booking.ScheduledStart < scheduledEnd &&
+                booking.ScheduledEnd > scheduledStart &&
+                (!excludeBookingId.HasValue || booking.Id != excludeBookingId.Value))
+            .OrderBy(booking => booking.ScheduledStart)
+            .ToListAsync(cancellationToken);
 
     public async Task AddAsync(
         Booking booking,
@@ -88,14 +90,19 @@ internal sealed class BookingRepository(AyoosDbContext dbContext)
         {
             await dbContext.SaveChangesAsync(cancellationToken);
         }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new ConflictException(
+                "The booking changed while it was being updated. Refresh and try again.");
+        }
         catch (DbUpdateException exception)
             when (exception.InnerException is PostgresException
             {
-                SqlState: PostgresErrorCodes.ExclusionViolation
+                SqlState: PostgresErrorCodes.UniqueViolation
             })
         {
             throw new ConflictException(
-                "The provider already has a booking that overlaps this time.");
+                "The selected provider slot was booked by another request. Refresh the schedule and choose another slot.");
         }
     }
 
@@ -122,7 +129,7 @@ internal sealed class BookingRepository(AyoosDbContext dbContext)
             var from = new DateTimeOffset(
                 fromDate.Value.ToDateTime(TimeOnly.MinValue),
                 TimeSpan.Zero);
-            query = query.Where(booking => booking.StartTime >= from);
+            query = query.Where(booking => booking.ScheduledStart >= from);
         }
 
         if (toDate.HasValue)
@@ -130,7 +137,7 @@ internal sealed class BookingRepository(AyoosDbContext dbContext)
             var through = new DateTimeOffset(
                 toDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue),
                 TimeSpan.Zero);
-            query = query.Where(booking => booking.StartTime < through);
+            query = query.Where(booking => booking.ScheduledStart < through);
         }
 
         if (status.HasValue)

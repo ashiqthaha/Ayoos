@@ -82,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signIn = useCallback(async (returnUrl = "/setup/practice") => {
+  const signIn = useCallback(async (returnUrl = "/") => {
     await getUserManager().signinRedirect({
       state: { returnUrl },
     });

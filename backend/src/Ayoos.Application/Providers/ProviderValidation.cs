@@ -52,6 +52,9 @@ internal static class AvailabilityValidation
         Expression<Func<T, TimeOnly>> endTime,
         Expression<Func<T, int>> slotDurationMinutes)
     {
+        var startTimeAccessor = startTime.Compile();
+        var endTimeAccessor = endTime.Compile();
+
         validator.RuleFor(providerId).NotEmpty().WithName("ProviderId");
         validator.RuleFor(dayOfWeek).IsInEnum().WithName("DayOfWeek");
         validator.RuleFor(endTime)
@@ -59,6 +62,14 @@ internal static class AvailabilityValidation
             .WithMessage("EndTime must be after StartTime.");
         validator.RuleFor(slotDurationMinutes)
             .InclusiveBetween(1, 1440)
+            .Must((command, duration) =>
+            {
+                var start = startTimeAccessor(command);
+                var end = endTimeAccessor(command);
+                return duration <= 0 || start >= end ||
+                    (end - start).Ticks % TimeSpan.FromMinutes(duration).Ticks == 0;
+            })
+            .WithMessage("SlotDurationMinutes must divide the availability window evenly.")
             .WithName("SlotDurationMinutes");
     }
 }

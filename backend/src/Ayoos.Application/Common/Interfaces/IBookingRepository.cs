@@ -28,10 +28,10 @@ public interface IBookingRepository
         DateOnly toDate,
         CancellationToken cancellationToken = default);
 
-    Task<bool> HasOverlapAsync(
+    Task<IReadOnlyList<Booking>> FindActiveOverlapsAsync(
         Guid providerId,
-        DateTimeOffset startTime,
-        DateTimeOffset endTime,
+        DateTimeOffset scheduledStart,
+        DateTimeOffset scheduledEnd,
         Guid? excludeBookingId = null,
         CancellationToken cancellationToken = default);
 

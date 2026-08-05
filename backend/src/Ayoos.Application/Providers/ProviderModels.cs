@@ -22,16 +22,20 @@ public sealed record AvailabilityScheduleModel(
     TimeOnly StartTime,
     TimeOnly EndTime,
     int SlotDurationMinutes,
-    bool IsActive);
+    bool IsActive,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset? UpdatedAtUtc);
 
 public sealed record AvailabilityExceptionModel(
     Guid Id,
     Guid ProviderId,
     DateOnly Date,
-    bool IsUnavailable,
-    TimeOnly? OverrideStartTime,
-    TimeOnly? OverrideEndTime,
-    string? Reason);
+    AvailabilityExceptionType ExceptionType,
+    TimeOnly? StartTime,
+    TimeOnly? EndTime,
+    string? Reason,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset? UpdatedAtUtc);
 
 public sealed record AvailabilitySlotModel(
     DateOnly Date,
@@ -44,6 +48,29 @@ public sealed record ProviderAvailabilityModel(
     Guid ProviderId,
     IReadOnlyList<AvailabilityScheduleModel> Schedules,
     IReadOnlyList<AvailabilityExceptionModel> Exceptions);
+
+public sealed record ProviderScheduleDayModel(
+    DayOfWeek DayOfWeek,
+    IReadOnlyList<AvailabilityScheduleModel> Schedules);
+
+public sealed record ProviderWeeklyScheduleModel(
+    Guid ProviderId,
+    IReadOnlyList<ProviderScheduleDayModel> Days);
+
+public sealed record AvailabilityOverlapConflictModel(
+    Guid Id,
+    DayOfWeek DayOfWeek,
+    TimeOnly StartTime,
+    TimeOnly EndTime,
+    int SlotDurationMinutes);
+
+public sealed record ScheduleOverlapPreviewModel(
+    bool HasConflicts,
+    IReadOnlyList<AvailabilityOverlapConflictModel> Conflicts);
+
+public sealed record AvailabilityScheduleMutationResult(
+    AvailabilityScheduleModel? Schedule,
+    ScheduleOverlapPreviewModel OverlapPreview);
 
 internal static class ProviderMappings
 {
@@ -70,7 +97,9 @@ internal static class ProviderMappings
             schedule.StartTime,
             schedule.EndTime,
             schedule.SlotDurationMinutes,
-            schedule.IsActive);
+            schedule.IsActive,
+            schedule.CreatedAtUtc,
+            schedule.UpdatedAtUtc);
 
     public static AvailabilityExceptionModel ToModel(
         this AvailabilityException exception) =>
@@ -78,8 +107,19 @@ internal static class ProviderMappings
             exception.Id,
             exception.ProviderId,
             exception.Date,
-            exception.IsUnavailable,
-            exception.OverrideStartTime,
-            exception.OverrideEndTime,
-            exception.Reason);
+            exception.ExceptionType,
+            exception.StartTime,
+            exception.EndTime,
+            exception.Reason,
+            exception.CreatedAtUtc,
+            exception.UpdatedAtUtc);
+
+    public static AvailabilityOverlapConflictModel ToConflictModel(
+        this AvailabilitySchedule schedule) =>
+        new(
+            schedule.Id,
+            schedule.DayOfWeek,
+            schedule.StartTime,
+            schedule.EndTime,
+            schedule.SlotDurationMinutes);
 }

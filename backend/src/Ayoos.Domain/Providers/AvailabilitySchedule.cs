@@ -16,7 +16,8 @@ public sealed class AvailabilitySchedule : Entity
         DayOfWeek dayOfWeek,
         TimeOnly startTime,
         TimeOnly endTime,
-        int slotDurationMinutes)
+        int slotDurationMinutes,
+        DateTimeOffset createdAtUtc)
         : base(id)
     {
         ProviderId = providerId;
@@ -26,6 +27,7 @@ public sealed class AvailabilitySchedule : Entity
         EndTime = endTime;
         SlotDurationMinutes = slotDurationMinutes;
         IsActive = true;
+        CreatedAtUtc = createdAtUtc.ToUniversalTime();
     }
 
     public Guid ProviderId { get; private set; }
@@ -42,13 +44,18 @@ public sealed class AvailabilitySchedule : Entity
 
     public bool IsActive { get; private set; }
 
+    public DateTimeOffset CreatedAtUtc { get; private set; }
+
+    public DateTimeOffset? UpdatedAtUtc { get; private set; }
+
     public static AvailabilitySchedule Create(
         Guid providerId,
         string tenantId,
         DayOfWeek dayOfWeek,
         TimeOnly startTime,
         TimeOnly endTime,
-        int slotDurationMinutes)
+        int slotDurationMinutes,
+        DateTimeOffset? createdAtUtc = null)
     {
         ArgumentOutOfRangeException.ThrowIfEqual(providerId, Guid.Empty);
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
@@ -61,14 +68,16 @@ public sealed class AvailabilitySchedule : Entity
             dayOfWeek,
             startTime,
             endTime,
-            slotDurationMinutes);
+            slotDurationMinutes,
+            createdAtUtc ?? DateTimeOffset.UtcNow);
     }
 
     public void Update(
         DayOfWeek dayOfWeek,
         TimeOnly startTime,
         TimeOnly endTime,
-        int slotDurationMinutes)
+        int slotDurationMinutes,
+        DateTimeOffset? updatedAtUtc = null)
     {
         ValidateHours(startTime, endTime, slotDurationMinutes);
 
@@ -76,9 +85,14 @@ public sealed class AvailabilitySchedule : Entity
         StartTime = startTime;
         EndTime = endTime;
         SlotDurationMinutes = slotDurationMinutes;
+        UpdatedAtUtc = (updatedAtUtc ?? DateTimeOffset.UtcNow).ToUniversalTime();
     }
 
-    public void Deactivate() => IsActive = false;
+    public void Deactivate(DateTimeOffset? updatedAtUtc = null)
+    {
+        IsActive = false;
+        UpdatedAtUtc = (updatedAtUtc ?? DateTimeOffset.UtcNow).ToUniversalTime();
+    }
 
     public bool Overlaps(
         DayOfWeek dayOfWeek,
@@ -96,14 +110,19 @@ public sealed class AvailabilitySchedule : Entity
     {
         if (startTime >= endTime)
         {
-            throw new ArgumentException("StartTime must be before EndTime.", nameof(startTime));
+            throw new DomainException("StartTime must be before EndTime.");
         }
 
         if (slotDurationMinutes <= 0)
         {
-            throw new ArgumentOutOfRangeException(
-                nameof(slotDurationMinutes),
-                "SlotDurationMinutes must be greater than zero.");
+            throw new DomainException("SlotDurationMinutes must be greater than zero.");
+        }
+
+        var window = endTime - startTime;
+        if (window.Ticks % TimeSpan.FromMinutes(slotDurationMinutes).Ticks != 0)
+        {
+            throw new DomainException(
+                "SlotDurationMinutes must divide the availability window evenly.");
         }
     }
 }

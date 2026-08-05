@@ -23,8 +23,11 @@ internal static class PracticeEndpoints
             .WithSummary("Creates a practice and registers it as a tenant.")
             .Produces<PracticeModel>(StatusCodes.Status201Created)
             .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status410Gone)
             .ProducesProblem(StatusCodes.Status409Conflict)
-            .RequireAuthorization(AuthorizationPolicies.StaffOrAdmin);
+            .RequireAuthorization(AuthorizationPolicies.PracticeAdmin);
 
         group.MapGet("/{slug}", GetPracticeAsync)
             .WithName("GetPractice")
@@ -56,7 +59,8 @@ internal static class PracticeEndpoints
                 request.TimeZone,
                 request.Address?.ToModel()!,
                 request.ContactEmail,
-                request.ContactPhone),
+                request.ContactPhone,
+                request.RawToken),
             cancellationToken);
 
         return Results.Created($"/api/practices/{result.Slug}", result);
@@ -138,7 +142,8 @@ internal sealed record CreatePracticeRequest(
     string TimeZone,
     PracticeAddressRequest? Address,
     string ContactEmail,
-    string ContactPhone);
+    string ContactPhone,
+    string RawToken);
 
 internal sealed record UpdatePracticeRequest(
     string Name,

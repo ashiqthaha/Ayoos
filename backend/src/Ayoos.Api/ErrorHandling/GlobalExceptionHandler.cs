@@ -1,4 +1,5 @@
 using Ayoos.Application.Common.Exceptions;
+using Ayoos.Domain.Common;
 using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
@@ -47,11 +48,38 @@ internal sealed class GlobalExceptionHandler : IExceptionHandler
                 };
                 break;
 
+            case DomainException:
+                problemDetails = new ProblemDetails
+                {
+                    Status = StatusCodes.Status400BadRequest,
+                    Title = "The request violates a domain rule.",
+                    Detail = exception.Message
+                };
+                break;
+
             case NotFoundException:
                 problemDetails = new ProblemDetails
                 {
                     Status = StatusCodes.Status404NotFound,
                     Title = "Resource not found.",
+                    Detail = exception.Message
+                };
+                break;
+
+            case ForbiddenException:
+                problemDetails = new ProblemDetails
+                {
+                    Status = StatusCodes.Status403Forbidden,
+                    Title = "Access denied.",
+                    Detail = exception.Message
+                };
+                break;
+
+            case GoneException:
+                problemDetails = new ProblemDetails
+                {
+                    Status = StatusCodes.Status410Gone,
+                    Title = "Resource no longer available.",
                     Detail = exception.Message
                 };
                 break;

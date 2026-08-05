@@ -92,12 +92,15 @@ type AccessTokenClaims = {
   name?: string;
   preferred_username?: string;
   email?: string;
+  practice?: string;
+  tenant?: string;
   realm_access?: {
     roles?: string[];
   };
 };
 
 const rolePriority = [
+  "ayoos-superadmin",
   "practice-admin",
   "provider",
   "staff",
@@ -105,6 +108,7 @@ const rolePriority = [
 ] as const;
 
 const roleLabels: Record<string, string> = {
+  "ayoos-superadmin": "Ayoos super-admin",
   "practice-admin": "Practice admin",
   provider: "Provider",
   staff: "Staff",
@@ -127,9 +131,22 @@ function decodeAccessToken(accessToken: string): AccessTokenClaims {
   }
 }
 
+export function getRealmRoles(user: User): string[] {
+  return decodeAccessToken(user.access_token).realm_access?.roles ?? [];
+}
+
+export function getPracticeSlug(user: User): string | undefined {
+  const claims = decodeAccessToken(user.access_token);
+  const practiceSlug = claims.practice || claims.tenant;
+
+  return typeof practiceSlug === "string" && practiceSlug.trim()
+    ? practiceSlug.trim()
+    : undefined;
+}
+
 export function getAyoosIdentity(user: User): AyoosIdentity {
   const claims = decodeAccessToken(user.access_token);
-  const roles = claims.realm_access?.roles ?? [];
+  const roles = getRealmRoles(user);
   const role = rolePriority.find((candidate) => roles.includes(candidate))
     ?? roles[0]
     ?? "authenticated";

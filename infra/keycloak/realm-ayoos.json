@@ -8,6 +8,10 @@
   "roles": {
     "realm": [
       {
+        "name": "ayoos-superadmin",
+        "description": "Onboards practices and manages practice invitations."
+      },
+      {
         "name": "practice-admin",
         "description": "Administers a practice and its staff."
       },
@@ -105,6 +109,15 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false
+    },
+    {
+      "clientId": "ayoos-admin-api",
+      "enabled": true,
+      "publicClient": false,
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "secret": "ayoos-admin-dev-secret"
     }
   ],
   "users": [
@@ -128,8 +141,21 @@
         }
       ],
       "realmRoles": [
-        "practice-admin"
+        "ayoos-superadmin"
       ]
+    },
+    {
+      "username": "service-account-ayoos-admin-api",
+      "enabled": true,
+      "serviceAccountClientId": "ayoos-admin-api",
+      "clientRoles": {
+        "realm-management": [
+          "manage-users",
+          "view-users",
+          "query-users",
+          "view-realm"
+        ]
+      }
     }
   ]
 }

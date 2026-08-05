@@ -112,16 +112,6 @@ public sealed class Provider : Entity
                 nameof(schedule));
         }
 
-        if (_availabilitySchedules.Any(existing =>
-            existing.Overlaps(
-                schedule.DayOfWeek,
-                schedule.StartTime,
-                schedule.EndTime)))
-        {
-            throw new InvalidOperationException(
-                "Availability schedules for the same provider and day must not overlap.");
-        }
-
         _availabilitySchedules.Add(schedule);
     }
 

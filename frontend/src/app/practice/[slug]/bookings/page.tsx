@@ -8,7 +8,8 @@ import { AyoosMark } from "@/components/ayoos-mark";
 import { useAuth } from "@/components/auth-provider";
 import { UserMenu } from "@/components/user-menu";
 import {
-  cancelBooking,
+  cancelBookingByPatient,
+  cancelBookingByProvider,
   completeBooking,
   confirmBooking,
   getMyPatientRecord,
@@ -24,19 +25,21 @@ import {
 } from "@/lib/api";
 
 const statusLabels: Record<BookingStatus, string> = {
-  0: "Requested",
+  0: "Pending",
   1: "Confirmed",
-  2: "Cancelled",
-  3: "Completed",
-  4: "No-show",
+  2: "Cancelled by patient",
+  3: "Cancelled by provider",
+  4: "Completed",
+  5: "No-show",
 };
 
 const statusClasses: Record<BookingStatus, string> = {
   0: "bg-amber-50 text-amber-700",
   1: "bg-sky-50 text-sky-700",
   2: "bg-slate-100 text-slate-600",
-  3: "bg-emerald-50 text-emerald-700",
-  4: "bg-rose-50 text-rose-700",
+  3: "bg-slate-100 text-slate-600",
+  4: "bg-emerald-50 text-emerald-700",
+  5: "bg-rose-50 text-rose-700",
 };
 
 const pageSize = 15;
@@ -59,6 +62,10 @@ export default function BookingsPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [status, setStatus] = useState<"all" | BookingStatus>("all");
+  const [providerFilter, setProviderFilter] = useState("");
+  const [patientFilter, setPatientFilter] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -67,8 +74,8 @@ export default function BookingsPage() {
 
   const role = identity?.role;
   const canManageClinicalStatus = role === "provider" || role === "practice-admin";
-  const canCreate = role === "patient" || role === "staff" || role === "practice-admin";
-  const canCancel = role === "patient" || role === "staff" || role === "practice-admin";
+  const canCreate = role === "patient" || role === "practice-admin";
+  const canCancel = role === "patient" || canManageClinicalStatus;
 
   useEffect(() => {
     if (!identity) return;
@@ -80,6 +87,10 @@ export default function BookingsPage() {
       try {
         const bookingPromise = listBookings(slug, {
           status: status === "all" ? undefined : status,
+          providerId: providerFilter || undefined,
+          patientId: role === "patient" ? undefined : patientFilter || undefined,
+          fromDate: fromDate || undefined,
+          toDate: toDate || undefined,
           page,
           pageSize,
           signal: controller.signal,
@@ -87,7 +98,7 @@ export default function BookingsPage() {
         const providerPromise = listProviders(slug, controller.signal);
         const patientPromise = role === "patient"
           ? getMyPatientRecord(slug, controller.signal).then((patient) => [patient])
-          : role === "staff" || role === "practice-admin"
+          : role === "practice-admin"
             ? listPatients(slug, {
                 page: 1,
                 pageSize: 100,
@@ -115,7 +126,7 @@ export default function BookingsPage() {
 
     void load();
     return () => controller.abort();
-  }, [identity, page, role, slug, status]);
+  }, [fromDate, identity, page, patientFilter, providerFilter, role, slug, status, toDate]);
 
   const providerNames = useMemo(
     () => new Map(providers.map((provider) => [
@@ -143,7 +154,9 @@ export default function BookingsPage() {
       const updated = action === "confirm"
         ? await confirmBooking(slug, booking.id)
         : action === "cancel"
-          ? await cancelBooking(slug, booking.id)
+          ? role === "patient"
+            ? await cancelBookingByPatient(slug, booking.id)
+            : await cancelBookingByProvider(slug, booking.id)
           : action === "complete"
             ? await completeBooking(slug, booking.id)
             : await markBookingNoShow(slug, booking.id);
@@ -202,24 +215,47 @@ export default function BookingsPage() {
           )}
 
           <section className="mt-8 overflow-hidden rounded-3xl border border-white bg-white shadow-[0_18px_50px_rgba(15,118,110,0.08)]">
-            <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+            <div className="border-b border-slate-100 px-5 py-5 sm:px-7">
               <h2 className="text-lg font-semibold text-slate-950">Appointments</h2>
-              <label className="text-sm font-semibold text-slate-600">
-                Status
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status
                 <select
                   value={status}
                   onChange={(event) => {
                     setStatus(event.target.value === "all" ? "all" : Number(event.target.value) as BookingStatus);
                     setPage(1);
                   }}
-                  className="ml-3 rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:border-teal-500"
+                  className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium normal-case tracking-normal text-slate-700 outline-none focus:border-teal-500"
                 >
                   <option value="all">All statuses</option>
                   {Object.entries(statusLabels).map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
                   ))}
                 </select>
-              </label>
+                </label>
+                {role !== "patient" && (
+                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Provider
+                    <select value={providerFilter} onChange={(event) => { setProviderFilter(event.target.value); setPage(1); }} className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium normal-case tracking-normal text-slate-700 outline-none focus:border-teal-500">
+                      <option value="">All providers</option>
+                      {providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.firstName} {provider.lastName}</option>)}
+                    </select>
+                  </label>
+                )}
+                {role === "practice-admin" && (
+                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Patient
+                    <select value={patientFilter} onChange={(event) => { setPatientFilter(event.target.value); setPage(1); }} className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium normal-case tracking-normal text-slate-700 outline-none focus:border-teal-500">
+                      <option value="">All patients</option>
+                      {patients.map((patient) => <option key={patient.id} value={patient.id}>{patient.preferredName || patient.firstName} {patient.lastName}</option>)}
+                    </select>
+                  </label>
+                )}
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">From
+                  <input type="date" value={fromDate} onChange={(event) => { setFromDate(event.target.value); setPage(1); }} className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700 outline-none focus:border-teal-500" />
+                </label>
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">To
+                  <input type="date" value={toDate} onChange={(event) => { setToDate(event.target.value); setPage(1); }} className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-700 outline-none focus:border-teal-500" />
+                </label>
+              </div>
             </div>
 
             {isLoading ? (
@@ -239,7 +275,7 @@ export default function BookingsPage() {
                   <li key={booking.id} className="grid gap-4 px-5 py-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-7">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-semibold text-slate-950">{formatAppointment(booking.startTime)}</p>
+                        <p className="font-semibold text-slate-950">{formatAppointment(booking.scheduledStart)}</p>
                         <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses[booking.status]}`}>{statusLabels[booking.status]}</span>
                       </div>
                       <p className="mt-2 text-sm text-slate-600">{providerNames.get(booking.providerId) || `Provider ${booking.providerId.slice(0, 8)}`}</p>

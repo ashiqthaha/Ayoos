@@ -1,6 +1,5 @@
-using Ayoos.Application.Common.Exceptions;
-using Ayoos.Application.Providers.CreateAvailability;
-using Ayoos.Application.Providers.UpdateAvailability;
+using Ayoos.Application.Providers.CreateAvailabilitySchedule;
+using Ayoos.Application.Providers.UpdateAvailabilitySchedule;
 using Ayoos.Domain.Practices;
 using Ayoos.Domain.Providers;
 using Ayoos.Infrastructure.Persistence;
@@ -14,56 +13,96 @@ namespace Ayoos.UnitTests;
 
 public sealed class AvailabilityOverlapDetectionTests
 {
+    private static readonly Guid ProviderId = Guid.NewGuid();
+    private const string TenantId = "f993c686-f775-44e5-a673-ea23cb00408b";
+
     [Fact]
-    public async Task Create_rejects_overlap_and_does_not_persist_it()
+    public void Detector_returns_an_overlapping_window()
     {
-        var fixture = await Fixture.CreateAsync();
-        await using var context = fixture.CreateContext();
-        var handler = new CreateAvailabilityCommandHandler(
-            new ProviderRepository(context));
+        var existing = CreateSchedule(new TimeOnly(9, 0), new TimeOnly(12, 0));
 
-        await Assert.ThrowsAsync<ConflictException>(() => handler.Handle(
-            new CreateAvailabilityCommand(
-                fixture.ProviderId,
-                DayOfWeek.Monday,
-                new TimeOnly(11, 30),
-                new TimeOnly(15, 0),
-                30),
-            CancellationToken.None));
+        var conflicts = AvailabilityOverlapDetector.FindConflicts(
+            [existing],
+            ProviderId,
+            DayOfWeek.Monday,
+            new TimeOnly(11, 30),
+            new TimeOnly(13, 0));
 
-        Assert.Single(await context.AvailabilitySchedules.ToListAsync());
+        Assert.Collection(conflicts, conflict => Assert.Equal(existing.Id, conflict.Id));
     }
 
     [Fact]
-    public async Task Create_accepts_an_adjacent_schedule()
+    public void Detector_does_not_return_an_adjacent_window()
+    {
+        var existing = CreateSchedule(new TimeOnly(9, 0), new TimeOnly(12, 0));
+
+        var conflicts = AvailabilityOverlapDetector.FindConflicts(
+            [existing],
+            ProviderId,
+            DayOfWeek.Monday,
+            new TimeOnly(12, 0),
+            new TimeOnly(13, 0));
+
+        Assert.Empty(conflicts);
+    }
+
+    [Fact]
+    public void Detector_does_not_return_a_disjoint_window()
+    {
+        var existing = CreateSchedule(new TimeOnly(9, 0), new TimeOnly(12, 0));
+
+        var conflicts = AvailabilityOverlapDetector.FindConflicts(
+            [existing],
+            ProviderId,
+            DayOfWeek.Monday,
+            new TimeOnly(14, 0),
+            new TimeOnly(16, 0));
+
+        Assert.Empty(conflicts);
+    }
+
+    [Fact]
+    public async Task Create_previews_overlap_without_persisting_until_confirmed()
     {
         var fixture = await Fixture.CreateAsync();
         await using var context = fixture.CreateContext();
-        var handler = new CreateAvailabilityCommandHandler(
-            new ProviderRepository(context));
+        var handler = new CreateAvailabilityScheduleCommandHandler(
+            new ProviderRepository(context),
+            TimeProvider.System);
+        var command = new CreateAvailabilityScheduleCommand(
+            fixture.ProviderId,
+            DayOfWeek.Monday,
+            new TimeOnly(11, 30),
+            new TimeOnly(15, 0),
+            30);
 
-        await handler.Handle(
-            new CreateAvailabilityCommand(
-                fixture.ProviderId,
-                DayOfWeek.Monday,
-                new TimeOnly(12, 0),
-                new TimeOnly(15, 0),
-                30),
+        var preview = await handler.Handle(command, CancellationToken.None);
+
+        Assert.Null(preview.Schedule);
+        Assert.True(preview.OverlapPreview.HasConflicts);
+        Assert.Single(preview.OverlapPreview.Conflicts);
+        Assert.Single(await context.AvailabilitySchedules.ToListAsync());
+
+        var confirmed = await handler.Handle(
+            command with { ConfirmOverlap = true },
             CancellationToken.None);
 
+        Assert.NotNull(confirmed.Schedule);
+        Assert.True(confirmed.OverlapPreview.HasConflicts);
         Assert.Equal(2, await context.AvailabilitySchedules.CountAsync());
     }
 
     [Fact]
-    public async Task Update_excludes_itself_but_rejects_overlap_with_another_schedule()
+    public async Task Update_excludes_itself_from_the_overlap_preview()
     {
-        var fixture = await Fixture.CreateAsync(addSecondSchedule: true);
+        var fixture = await Fixture.CreateAsync();
         await using var context = fixture.CreateContext();
-        var handler = new UpdateAvailabilityCommandHandler(
-            new ProviderRepository(context));
+        var handler = new UpdateAvailabilityScheduleCommandHandler(
+            new ProviderRepository(context),
+            TimeProvider.System);
 
-        var unchanged = await handler.Handle(
-            new UpdateAvailabilityCommand(
+        var result = await handler.Handle(
+            new UpdateAvailabilityScheduleCommand(
                 fixture.ProviderId,
                 fixture.ScheduleId,
                 DayOfWeek.Monday,
@@ -71,18 +110,19 @@ public sealed class AvailabilityOverlapDetectionTests
                 new TimeOnly(12, 0),
                 30),
             CancellationToken.None);
-        Assert.Equal(fixture.ScheduleId, unchanged.Id);
 
-        await Assert.ThrowsAsync<ConflictException>(() => handler.Handle(
-            new UpdateAvailabilityCommand(
-                fixture.ProviderId,
-                fixture.ScheduleId,
-                DayOfWeek.Monday,
-                new TimeOnly(9, 0),
-                new TimeOnly(13, 0),
-                30),
-            CancellationToken.None));
+        Assert.NotNull(result.Schedule);
+        Assert.False(result.OverlapPreview.HasConflicts);
     }
+
+    private static AvailabilitySchedule CreateSchedule(TimeOnly start, TimeOnly end) =>
+        AvailabilitySchedule.Create(
+            ProviderId,
+            TenantId,
+            DayOfWeek.Monday,
+            start,
+            end,
+            30);
 
     private sealed class Fixture(
         Practice practice,
@@ -91,15 +131,13 @@ public sealed class AvailabilityOverlapDetectionTests
         Guid providerId,
         Guid scheduleId)
     {
-        private string DatabaseName { get; } = databaseName;
-        private InMemoryDatabaseRoot DatabaseRoot { get; } = databaseRoot;
         public Guid ProviderId { get; } = providerId;
         public Guid ScheduleId { get; } = scheduleId;
 
         public AyoosDbContext CreateContext()
         {
             var options = new DbContextOptionsBuilder<AyoosDbContext>()
-                .UseInMemoryDatabase(DatabaseName, DatabaseRoot)
+                .UseInMemoryDatabase(databaseName, databaseRoot)
                 .Options;
             var tenant = new TenantInfo
             {
@@ -107,12 +145,10 @@ public sealed class AvailabilityOverlapDetectionTests
                 Identifier = practice.Slug,
                 Name = practice.Name
             };
-            return MultiTenantDbContext.Create<AyoosDbContext, TenantInfo>(
-                tenant,
-                options);
+            return MultiTenantDbContext.Create<AyoosDbContext, TenantInfo>(tenant, options);
         }
 
-        public static async Task<Fixture> CreateAsync(bool addSecondSchedule = false)
+        public static async Task<Fixture> CreateAsync()
         {
             var practice = Practice.Create(
                 "Tenant Under Test",
@@ -122,14 +158,16 @@ public sealed class AvailabilityOverlapDetectionTests
                 "practice@example.com",
                 "+1-212-555-0100",
                 DateTimeOffset.UtcNow);
-            var fixture = new Fixture(
+            var databaseName = Guid.NewGuid().ToString("N");
+            var databaseRoot = new InMemoryDatabaseRoot();
+            var seed = new Fixture(
                 practice,
-                Guid.NewGuid().ToString("N"),
-                new InMemoryDatabaseRoot(),
+                databaseName,
+                databaseRoot,
                 Guid.Empty,
                 Guid.Empty);
 
-            await using var context = fixture.CreateContext();
+            await using var context = seed.CreateContext();
             var provider = Provider.Create(
                 practice.Id,
                 "Maya",
@@ -139,35 +177,24 @@ public sealed class AvailabilityOverlapDetectionTests
                 "maya@example.com",
                 "+1-212-555-0101",
                 DateTimeOffset.UtcNow);
-            var first = AvailabilitySchedule.Create(
+            var schedule = AvailabilitySchedule.Create(
                 provider.Id,
                 practice.Id.ToString("D"),
                 DayOfWeek.Monday,
                 new TimeOnly(9, 0),
                 new TimeOnly(12, 0),
                 30);
-
             context.Practices.Add(practice);
             context.Providers.Add(provider);
-            context.AvailabilitySchedules.Add(first);
-            if (addSecondSchedule)
-            {
-                context.AvailabilitySchedules.Add(AvailabilitySchedule.Create(
-                    provider.Id,
-                    practice.Id.ToString("D"),
-                    DayOfWeek.Monday,
-                    new TimeOnly(12, 0),
-                    new TimeOnly(15, 0),
-                    30));
-            }
-
+            context.AvailabilitySchedules.Add(schedule);
             await context.SaveChangesAsync();
+
             return new Fixture(
                 practice,
-                fixture.DatabaseName,
-                fixture.DatabaseRoot,
+                databaseName,
+                databaseRoot,
                 provider.Id,
-                first.Id);
+                schedule.Id);
         }
     }
 }

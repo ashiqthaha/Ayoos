@@ -9,7 +9,7 @@ import { useAuth } from "@/components/auth-provider";
 function safeReturnUrl(value: string | null): string {
   return value?.startsWith("/") && !value.startsWith("//")
     ? value
-    : "/setup/practice";
+    : "/";
 }
 
 function LoginContent() {

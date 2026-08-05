@@ -4,5 +4,10 @@ namespace Ayoos.Application.Common.Interfaces;
 
 public interface IPracticeProvisioner
 {
-    Task ProvisionAsync(Practice practice, CancellationToken cancellationToken = default);
+    Task ProvisionAsync(
+        Practice practice,
+        Guid invitationId,
+        string practiceAdminKeycloakUserId,
+        DateTimeOffset consumedAt,
+        CancellationToken cancellationToken = default);
 }
